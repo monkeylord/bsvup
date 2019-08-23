@@ -1,10 +1,10 @@
 {
   "name": "bsvup",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "Put file/directory on BSV, using D protocol.",
   "main": "cli.js",
   "bin": {
-    "metasite": "./cli.js"
+    "bsvup": "./cli.js"
   },
   "dependencies": {
     "bitcoin-ibe": "^1.2.2",

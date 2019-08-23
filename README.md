@@ -8,6 +8,40 @@
 
 本工具目的即是这样的实现。
 
+### 安装与使用
+
+#### 安装
+
+~~~bash
+npm install -g bsvup
+~~~
+
+#### 初始化
+
+首先进入目标目录
+
+~~~bash
+bsvup init
+~~~
+
+#### 提供上链花费
+
+~~~bash
+bsvup charge
+~~~
+
+#### 上链
+
+~~~bash
+bsvup upload
+~~~
+
+#### 转出余额
+
+~~~bash
+bsvup transfer
+~~~
+
 ### 流程图
 
 上传流程如下
