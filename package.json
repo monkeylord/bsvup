@@ -1,0 +1,43 @@
+{
+  "name": "bsvup",
+  "version": "1.0.0",
+  "description": "Put file/directory on BSV, using D protocol.",
+  "main": "cli.js",
+  "bin": {
+    "metasite": "./cli.js"
+  },
+  "dependencies": {
+    "bitcoin-ibe": "^1.2.2",
+    "bitcore-explorers": "^1.0.1",
+    "bsv": "^0.27.2",
+    "commander": "^2.20.0",
+    "inquirer": "^6.5.0",
+    "mime": "^2.4.4",
+    "mime-lookup": "^0.0.2",
+    "mime-db": "^1.40.0",
+    "node-fetch": "^2.6.0",
+    "qrcode-terminal": "^0.12.0"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "mocha"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/monkeylord/bsvup.git"
+  },
+  "keywords": [
+    "bsv",
+    "d",
+    "bitcoin",
+    "blockchain",
+    "file",
+    "directory"
+  ],
+  "author": "Monkeylord",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/monkeylord/bsvup/issues"
+  },
+  "homepage": "https://github.com/monkeylord/bsvup#readme"
+}
