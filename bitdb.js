@@ -32,9 +32,9 @@ function findD(key, address){
     return fetch(url, header)
         .then(r=>r.json())
         .then(r=>r.u.concat(r.c))
-        .then(r=>r.sort((a,b)=>a.sequence<b.sequence))
+        .then(r=>r.sort((a,b)=>b.sequence - a.sequence))
         //.then(r=>{console.log(r);return r})
-        .then(r=>(r.length>0)?r[0]:null)
+        //.then(r=>(r.length>0)?r[0]:null)
         .catch(err=>console.log(err))
 }
 
@@ -43,7 +43,10 @@ function queryHash(hash){
     return {
         "v": 3,
         "q": {
-            "find": { "out.s5": hash},
+            "find": {
+                "$or": [{"out.s1": "15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up"},{"out.s1": "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut"}],
+                "out.s5": hash
+            },
         },
         "r": {
             "f": "[ .[] | {prefix: .out[0].s1 , contenttype: .out[0].s3, txid: .tx.h} ]"

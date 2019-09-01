@@ -6,6 +6,7 @@ const fs = require('fs')
 const BitDB = require('./bitdb.js')
 const MimeLookup = require('mime-lookup');
 const MIME = new MimeLookup(require('mime-db'))
+const crypto = require("crypto")
 
 async function getUTXOs(address){
     return new Promise((resolve, reject)=>{
@@ -32,16 +33,23 @@ async function broadcast(tx){
     })
 }
 
-async function findExist(file){
+async function findExist(buf, mime){
+    var sha1 = crypto.createHash('sha1').update(buf).digest('hex')
+    if(global.debug)console.log(sha1)
     if(global.quick)return null
-    var buf = fs.readFileSync(file)
-    var records = await BitDB.findExist(buf)
+    var records = []
+    if(fs.existsSync(`./.bsv/objects/${sha1}`))records = JSON.parse(fs.readFileSync(`./.bsv/objects/${sha1}`))
+    if(!Array.isArray(records) || records.length==0){
+        console.log(" - 向BitDB搜索已存在的文件记录")
+        records = await BitDB.findExist(buf)
+        records = records.filter(record=>record.contenttype==mime)
+        fs.writeFileSync(`./.bsv/objects/${sha1}`, JSON.stringify(records))
+    }
     if(records.length==0)return null
-    records = records.filter(record=>record.contenttype==MIME.lookup(file))
     var txs = await Promise.all(records.map(record => getTX(record.txid)))
     var matchTX = await Promise.race(txs.map(tx=>{
         return new Promise(async (resolve, reject)=>{
-            var databuf = await getData(tx)
+            var databuf = await getData(tx).catch(err=>new Buffer(0))
             if(databuf.equals(buf))resolve(tx)
             else reject()
         })
@@ -49,9 +57,17 @@ async function findExist(file){
     if(matchTX)return matchTX
     else return null
 }
+
+var dRecords = null
 async function findD(key, address ,value){
     if(global.quick)return null
-    var dRecord = await BitDB.findD(key, address)
+    //var dRecords = await BitDB.findD(key, address)
+    if(!dRecords){
+        console.log(`查询${address}下所有D记录中...`)
+        dRecords = await BitDB.findD(null, address)
+    }
+    var keyDRecords = dRecords.filter(record=>record.key==key)
+    var dRecord = (keyDRecords.length>0)?keyDRecords[0]:null
     if(dRecord && dRecord.value == value)return true
     else return false
 }
@@ -65,9 +81,15 @@ async function getTX(txid){
             insight.requestGet(`/api/tx/${txid}`,(err, res, body)=>{
                 if(err || res.statusCode !== 200) reject(err || body)
                 //console.log(body)
-                var rawtx = JSON.parse(body).rawtx
-                fs.writeFileSync(`./.bsv/tx/${txid}`, rawtx)
-                resolve(bsv.Transaction(rawtx))
+                try{
+                    var rawtx = JSON.parse(body).rawtx
+                    fs.writeFileSync(`./.bsv/tx/${txid}`, rawtx)
+                    resolve(bsv.Transaction(rawtx))
+                }catch(err){
+                    console.log("获取TX时发生错误")
+                    console.log(body)
+                    reject(err)
+                }
             })
         }
     }).catch(err=>null)
@@ -80,10 +102,16 @@ async function getData(tx){
     var bufs = dataout[0].script.chunks.map(chunk=>(chunk.buf)?chunk.buf:new Buffer(0))
     if(bufs[1].toString()=="19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut")return bufs[2]
     else{
+        // 处理Bcat
         var bParts = bufs.slice(7).map(buf=>buf.toString('hex'))
-        var bPartTXs = await Promise(bParts.map(bPart=>getTX(bPart)))
+        if(global.debug)console.log("处理Bcat中。。。" + bParts)
+        var bPartTXs = await Promise.all(bParts.map(bPart=>getTX(bPart)))
+        if(global.debug)console.log(bPartTXs.map(tx=>tx.id))
         var bPartBufs = bPartTXs.map(tx=>tx.outputs.filter(out=>out.script.isDataOut())[0].script.chunks[2].buf)
-        return bPartBufs.reduce((buf,partBuf)=>buf.concat(partBuf),new Buffer(0))
+        if(global.debug)console.log(bPartBufs.map(buf=>buf.length))
+        var buf = Buffer.concat(bPartBufs)
+        if(global.debug)console.log(buf.length)
+        return buf
     }
 }
 

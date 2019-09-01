@@ -46,6 +46,7 @@ program
     .option('-k, --key [private key]', '指定使用的私钥')
     .option('-q, --quick', '快速上传，不检查文件是否已在链上')
     .option('-a, --address', '目标转账地址')
+    .option('-t, --type [type]', '目录类型，用于表明目录被如何表示 dir 、 html 或 none', "html")
 
 var unBroadcast = []
 if(process.argv.length<2){
@@ -113,7 +114,7 @@ async function init(){
         var pk = bsv.PrivateKey(privkey)
         console.log(`链上地址 onchain address：${pk.toAddress().toString()}`)
         await saveKey(pk.toString())
-        qrcode.generate(`${pk.toAddress().toString()}`)
+        showQR(pk)
     }
 }
 function broadcast(){
@@ -124,8 +125,11 @@ function broadcast(){
             return new Promise((resolve, reject)=>{
                 insight.broadcast(tx.toString(),(err,res)=>{
                     if(err){
-                        console.log(" Insight API return Errors: ")
-                        console.log(err)
+                        console.log(`${tx.id} 广播失败，原因：`)
+                        if(err.message && err.message.message){
+                            console.log(err.message.message.split("\n")[0])
+                            console.log(err.message.message.split("\n")[2])
+                        }
                         unBroadcast.push(tx)
                     }else{
                         console.log(`Broadcasted ${res}`)
@@ -155,7 +159,7 @@ async function upload(){
     global.quick = (program.quick)?true:false
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
-    var tasks = await logic.upload(path, key)
+    var tasks = await logic.upload(path, key, program.type)
 
     // 准备上传
     unBroadcast = tasks.map(task=>task.tx)
@@ -200,12 +204,18 @@ async function upload(){
 async function charge(){
     //qrcode.generate(`bitcoin://${loadKey().toAddress().toString()}?sv&message=destine`)
     var key = await loadKey()
+    showQR(key)
+}
+
+function showQR(key){
     console.log("-----------------------------------------------")
-    console.log("适用于通常比特币钱包的二维码地址如下")
+    console.log(`地址为：${key.toAddress().toString()}`)
+    console.log("-----------------------------------------------")
+    console.log("适用于通常比特币钱包的二维码如下")
     console.log("-----------------------------------------------")
     qrcode.generate(`bitcoin://${key.toAddress().toString()}?sv&message=destine`)
     console.log("-----------------------------------------------")
-    console.log("适用于打点钱包的二维码地址如下")
+    console.log("适用于打点钱包的二维码如下")
     console.log("-----------------------------------------------")
     qrcode.generate(`${key.toAddress().toString()}`)
     console.log("-----------------------------------------------")

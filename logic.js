@@ -13,7 +13,7 @@ const BASE_TX = 400
 const FEE_PER_KB = 1536
 const DUST_LIMIT = 546
 
-async function upload(path, privkey){
+async function upload(path, privkey, dirHandle){
     // 准备上传任务
     var tasks = []
     if(fs.statSync(path).isDirectory()){
@@ -21,13 +21,23 @@ async function upload(path, privkey){
         // 处理文件上传任务
         while(files.length>0){
             var file = files.pop()
+            var {buf, mime} = readFile(file, dirHandle)
+            if(global.debug)console.log(mime)
+            // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
+            if(!mime)continue
+            /*
+            var buf = fs.readFileSync(file)
+            var mime = MIME.lookup(file)
+            */
             var filename = file.slice(path.length)
             if(filename.startsWith('/'))filename = filename.slice(1)
+            filename = encodeURI(filename)
             console.log(`正在处理 ${filename}`)
-            var fileTX = await API.findExist(file).catch(err=>null)
+            var fileTX = await API.findExist(buf, mime).catch(err=>null)
             if(fileTX){
                 // 如果链上文件存在，那么要判断是否已经存在D指向了
                 console.log(`${filename} - 找到了链上文件数据`)
+                if(global.debug)console.log(fileTX.id)
                 var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
                 if(!dTX){
                     // 链上文件存在而D不存在，则单纯做一次重新指向即可
@@ -37,7 +47,7 @@ async function upload(path, privkey){
                     console.log(`${filename} - 找到了链上D记录，无需上传`)
                 }
             }else{
-                var fileTasks = upload_FileTask(file)
+                var fileTasks = upload_FileTask(buf, mime)
                 var dTask = upload_dTask(filename, fileTasks)
                 fileTasks.forEach(task=>tasks.push(task))
                 tasks.push(dTask)
@@ -47,10 +57,19 @@ async function upload(path, privkey){
     }else{
         // 先找是否在链上存在
         var filename = path.split("/").reverse()[0].split("\\").reverse()[0]
-        var fileTX = await API.findExist(path)
+        filename = encodeURI(filename)
+        var {buf, mime} = readFile(path, dirHandle)
+        // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
+        if(!mime)return []
+        /*
+        var buf = fs.readFileSync(path)
+        var mime = MIME.lookup(path)
+        */
+        var fileTX = await API.findExist(buf, mime).catch(err=>null)
         if(fileTX){
             // 如果链上文件存在，那么要判断是否已经存在D指向了
             console.log("找到了链上文件数据。")
+            if(global.debug)console.log(fileTX.id)
             var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
             if(!dTX){
                 // 链上文件存在而D不存在，则单纯做一次重新指向即可
@@ -60,7 +79,7 @@ async function upload(path, privkey){
                 console.log("找到了链上D记录，无需上传。")
             }
         }else{
-            var fileTasks = upload_FileTask(path)
+            var fileTasks = upload_FileTask(buf, mime)
             var dTask = upload_dTask(filename, fileTasks)
             fileTasks.forEach(task=>tasks.push(task))
             tasks.push(dTask)
@@ -75,9 +94,11 @@ async function upload(path, privkey){
     return tasks
 }
 
-function upload_FileTask(filename){
+function upload_FileTask(fileBuf, mime){
+    /*
     var fileBuf = fs.readFileSync(filename)
     var mime = MIME.lookup(filename)
+    */
     var sha1 = crypto.createHash('sha1').update(fileBuf).digest('hex')
 
     var tasks = []
@@ -264,7 +285,8 @@ function pendTasks(tasks, privkey){
                         break;
                     case "D":
                         // 假设：B TX的依赖在depTasks中第一个
-                        task.out.value = task.deps[0].tx.id
+                        task.out.value = task.deps.filter(task=>(task.type=="B"||task.type=="Bcat"))[0].tx.id
+                        if(global.debug)console.log(task.deps.map(task=>task.tx.id))
                         break;
                     default:
                         // 按说只有Bcat和D要处理依赖。所以不应该执行到这里。
@@ -277,13 +299,42 @@ function pendTasks(tasks, privkey){
     }
 }
 
+function readFile(file, dirHandle){
+    if(fs.statSync(file).isDirectory()){
+        if(global.debug)console.log("处理目录")
+        switch(dirHandle){
+            case "html":
+                return {
+                    buf: Buffer.from('<head><meta http-equiv="refresh" content="0;url=index.html"></head>'),
+                    mime: "text/html"
+                }
+            case "dir":
+                // 创建目录浏览
+                var files = fs.readdirSync(file).map(item=>(fs.statSync(file+"/"+item).isDirectory())?item+"/":item)
+                return {
+                    buf: Buffer.from(`<head></head><body><script language="javascript" type="text/javascript">var files = ${JSON.stringify(files)};document.write("<p><a href='../'>..</a></p>");files.forEach(file=>document.write("<p><a href='" + file + "'>" + file + "</a></p>"));</script></body>`),
+                    mime: "text/html"
+                }
+            default:
+                return {}
+        }
+    }else{
+        var buf = fs.readFileSync(file)
+        var mime = MIME.lookup(file)
+        return {
+            buf: buf,
+            mime: mime
+        }
+    }
+}
+
 function readFiles(path){
     path = path || "."
     return fs.readdirSync(path).map(item=>{
         if(item==".bsv")return []
         var itemPath = path + "/" + item
-        return (fs.statSync(itemPath).isDirectory())?readFiles(itemPath):[itemPath]
-    }).reduce((res,item)=>res.concat(item))
+        return (fs.statSync(itemPath).isDirectory())?readFiles(itemPath).concat([itemPath + "/"]):[itemPath]
+    }).reduce((res,item)=>res.concat(item), [])
 }
 
 module.exports.upload = upload
