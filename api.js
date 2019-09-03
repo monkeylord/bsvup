@@ -40,7 +40,7 @@ async function findExist(buf, mime){
     var records = []
     if(fs.existsSync(`./.bsv/objects/${sha1}`))records = JSON.parse(fs.readFileSync(`./.bsv/objects/${sha1}`))
     if(!Array.isArray(records) || records.length==0){
-        console.log(" - 向BitDB搜索已存在的文件记录 Query from BitDB")
+        console.log(" - 向BitDB搜索已存在的文件记录 Querying BitDB")
         records = await BitDB.findExist(buf)
         records = records.filter(record=>record.contenttype==mime)
         fs.writeFileSync(`./.bsv/objects/${sha1}`, JSON.stringify(records))
