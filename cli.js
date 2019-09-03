@@ -64,8 +64,7 @@ if(fs.existsSync("./.bsv/unbroadcasted.tx.json")){
         default: true 
     }]).then((answers) => {
         if(answers.continue){
-            unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx=>bsv.Transaction(tx))
-            console.log(`${unBroadcast.length} TX(s) loaded.`)
+            console.log(`${api.loadUnbroadcast()} TX(s) loaded.`)
             console.log("开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...")
             broadcast()
         }else{
@@ -79,21 +78,8 @@ if(fs.existsSync("./.bsv/unbroadcasted.tx.json")){
 }
 
 async function init(){
-    if(!fs.existsSync("./.bsv")){
-        fs.mkdirSync("./.bsv")
-    }
-    // 初始化objects结构
-    if(!fs.existsSync("./.bsv/objects")){
-        fs.mkdirSync("./.bsv/objects")
-    }
-    // 初始化D镜像目录
-    if(!fs.existsSync("./.bsv/tx")){
-        fs.mkdirSync("./.bsv/tx")
-    }
-    // 初始化D树文件
-    if(!fs.existsSync("./.bsv/info")){
-        fs.mkdirSync("./.bsv/info")
-    }
+    api.init()
+
     // 记录私钥，并产生地址
     if(fs.existsSync("./.bsv/key")){
         console.log("当前目录已经初始化过，如需重新初始化，请删除 .bsv 目录（删除前注意备份私钥）。")
@@ -119,57 +105,28 @@ async function init(){
         showQR(pk)
     }
 }
-function broadcast(){
-    var toBroadcast = unBroadcast
-    unBroadcast = []
-    toBroadcast.reduce((promise,tx,index)=>{
-        return promise.then(p=>{
-            return new Promise((resolve, reject)=>{
-                insight.broadcast(tx.toString(),(err,res)=>{
-                    if(err){
-                        console.log(`${tx.id} 广播失败，原因 fail to broadcast:`)
-                        if(err.message && err.message.message){
-                            console.log(err.message.message.split("\n")[0])
-                            console.log(err.message.message.split("\n")[2])
-                        }
-                        unBroadcast.push(tx)
-                    }else{
-                        console.log(`Broadcasted ${res}`)
-                        fs.writeFileSync(`./.bsv/tx/${res}`, tx)
-                    }
-                    resolve()
-                })
-            })
-        })
-    },
-    new Promise(r=>r()))
-    .then(r=>{
-        if(unBroadcast.length>0){
-            console.log(`${unBroadcast.length}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
-            console.log(`Not All Transaction Broadcasted, ${unBroadcast.length} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
-            fs.writeFileSync("./.bsv/unbroadcasted.tx.json", JSON.stringify(unBroadcast))
-            setTimeout(broadcast,120000)
-        }else{
-            console.log("所有TX已广播！")
-            console.log("All TX Broadcasted!")
-            if(fs.existsSync("./.bsv/unbroadcasted.tx.json"))fs.unlinkSync("./.bsv/unbroadcasted.tx.json")
-        }
-    })
+async function broadcast(){
+    let remaining = await api.broadcastAll()
+    if(remaining>0){
+        console.log(`${remaining}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
+        console.log(`Not All Transaction Broadcasted, ${remaining} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
+        setTimeout(broadcast,120000)
+    }else{
+        console.log("所有TX已广播！")
+        console.log("All TX Broadcasted!")
+    }
 }
 
 async function upload(){
     global.quick = (program.quick)?true:false
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
-    var tasks = await logic.upload(path, key, program.type)
+
+    var tasks = api.prepareUpload(path, key, program.type)
 
     // 准备上传
-    unBroadcast = tasks.map(task=>task.tx)
-    tasks.every(task=>{
-        if(global.debug)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
-        return txutil.verifyTX(task.tx)
-    })
-    fs.writeFileSync("./.bsv/unbroadcasted.tx.json",JSON.stringify(unBroadcast))
+    let unBroadcast = tasks.map(task=>task.tx)
+
     // 做一些描述
     console.log("----------------------------------------------------------------------")
     console.log(`链上地址为 Address: ${key.toAddress().toString()}`)
@@ -242,15 +199,7 @@ async function transfer(){
         return
     }
     var key = await loadKey()
-    var utxos = await api.getUTXOs(key.toAddress().toString())
-    // 开始构造转账TX
-    var tx = bsv.Transaction()
-    utxos.forEach(utxo=>tx.from(utxo))
-    tx.change(address)
-    tx.feePerKb(1536)
-    tx.sign(key)
-    console.log(`转账TXID Transfer TXID: ${tx.id}`)
-    api.broadcast(tx.toString())
+    await api.transfer(address, key)
 }
 
 async function loadKey(){
@@ -261,9 +210,7 @@ async function loadKey(){
         message: "请输入密码以解锁私钥 Password to unlock private key:", 
     }])
     var password = answers.password
-    var buf = fs.readFileSync("./.bsv/key").toString()
-    var decBuf = decrypt(buf, password)
-    return bsv.PrivateKey(decBuf.toString())
+    return api.loadKey(password)
 }
 async function saveKey(privkey){
     var answers = await inquirer.prompt([ { 
@@ -273,18 +220,5 @@ async function saveKey(privkey){
         message: "请设置密码以加密私钥 Set key unlock password:", 
     }])
     var password = answers.password
-    var buf = Buffer.from(privkey.toString())
-    var encBuf = encrypt(buf, password)
-    fs.writeFileSync("./.bsv/key", encBuf)
-}
-
-
-function encrypt(plaintext, password){
-    var cipher = crypto.createCipher('aes-128-ecb',password)
-    return cipher.update(plaintext,'utf8','hex') + cipher.final('hex')
-}
-function decrypt(ciphertext, password){
-    var cipher = crypto.createDecipher('aes-128-ecb',password)
-    return cipher.update(ciphertext,'hex','utf8') + cipher.final('utf8')
-
+    api.saveKey(privkey, password)
 }
