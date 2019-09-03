@@ -40,7 +40,7 @@ async function findExist(buf, mime){
     var records = []
     if(fs.existsSync(`./.bsv/objects/${sha1}`))records = JSON.parse(fs.readFileSync(`./.bsv/objects/${sha1}`))
     if(!Array.isArray(records) || records.length==0){
-        console.log(" - 向BitDB搜索已存在的文件记录")
+        console.log(" - 向BitDB搜索已存在的文件记录 Query from BitDB")
         records = await BitDB.findExist(buf)
         records = records.filter(record=>record.contenttype==mime)
         fs.writeFileSync(`./.bsv/objects/${sha1}`, JSON.stringify(records))
@@ -64,6 +64,7 @@ async function findD(key, address ,value){
     //var dRecords = await BitDB.findD(key, address)
     if(!dRecords){
         console.log(`查询${address}下所有D记录中...`)
+        console.log(`Query all D records on ${address} from BitDB...`)
         dRecords = await BitDB.findD(null, address)
     }
     var keyDRecords = dRecords.filter(record=>record.key==key)
@@ -86,7 +87,7 @@ async function getTX(txid){
                     fs.writeFileSync(`./.bsv/tx/${txid}`, rawtx)
                     resolve(bsv.Transaction(rawtx))
                 }catch(err){
-                    console.log("获取TX时发生错误")
+                    console.log("获取TX时发生错误 Error acquring TX")
                     console.log(body)
                     reject(err)
                 }
