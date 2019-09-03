@@ -126,10 +126,8 @@ function broadcast(){
                 insight.broadcast(tx.toString(),(err,res)=>{
                     if(err){
                         console.log(`${tx.id} 广播失败，原因：`)
-                        if(err.message && err.message.message){
-                            console.log(err.message.message.split("\n")[0])
-                            console.log(err.message.message.split("\n")[2])
-                        }
+                        console.log(err.message.message.split("\n")[0])
+                        console.log(err.message.message.split("\n")[2])
                         unBroadcast.push(tx)
                     }else{
                         console.log(`Broadcasted ${res}`)
