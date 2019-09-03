@@ -7,6 +7,7 @@ const BitDB = require('./bitdb.js')
 const MimeLookup = require('mime-lookup');
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
+const logic = require("./logic.js")
 
 function init(){
     if(!fs.existsSync("./.bsv")){

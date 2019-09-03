@@ -11,7 +11,6 @@ const Insight = explorer.Insight
 const insight = new explorer.Insight('https://api.bitindex.network')
 const txutil = require("./txUtil.js")
 const api = require("./api.js")
-const logic = require("./logic.js")
 
 global.debug = false
 global.quick = false
@@ -122,7 +121,7 @@ async function upload(){
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
 
-    var tasks = api.prepareUpload(path, key, program.type)
+    var tasks = await api.prepareUpload(path, key, program.type)
 
     // 准备上传
     let unBroadcast = tasks.map(task=>task.tx)
