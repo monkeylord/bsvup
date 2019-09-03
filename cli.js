@@ -43,6 +43,7 @@ program
 program
     //.version(require('./package.json').version)
     .option('-f, --file [file]', '指定要上传的文件/目录  File/Directory to upload')
+    .option('-s, --subkey [subpath]', '将内容上传到的子路径键  Subpath key to upload contents to', "/")
     .option('-k, --key [private key]', '指定使用的私钥  Appoint private key mannually')
     .option('-q, --quick', '快速上传，不检查文件是否已在链上  Skip file existence check')
     .option('-a, --address', '目标转账地址 Address to transfer to')
@@ -161,7 +162,8 @@ async function upload(){
     global.quick = (program.quick)?true:false
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
-    var tasks = await logic.upload(path, key, program.type)
+    var subkey = (program.subkey)?program.subkey:"/"
+    var tasks = await logic.upload(path, key, subkey, program.type)
 
     // 准备上传
     unBroadcast = tasks.map(task=>task.tx)

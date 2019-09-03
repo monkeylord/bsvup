@@ -13,7 +13,7 @@ const BASE_TX = 400
 const FEE_PER_KB = 1536
 const DUST_LIMIT = 546
 
-async function upload(path, privkey, dirHandle){
+async function upload(path, privkey, subkey, dirHandle){
     // 准备上传任务
     var tasks = []
     if(fs.statSync(path).isDirectory()){
@@ -30,6 +30,7 @@ async function upload(path, privkey, dirHandle){
             var mime = MIME.lookup(file)
             */
             var filename = file.slice(path.length)
+            filename = (subkey + '/' + filename).replace(/\/\/+/g,'/')
             if(filename.startsWith('/'))filename = filename.slice(1)
             filename = encodeURI(filename)
             console.log(`正在处理 Handling ${filename}`)
@@ -57,6 +58,8 @@ async function upload(path, privkey, dirHandle){
     }else{
         // 先找是否在链上存在
         var filename = path.split("/").reverse()[0].split("\\").reverse()[0]
+        filename = (subkey + '/' + filename).replace(/\/\/+/g,'/')
+        if(filename.startsWith('/'))filename = filename.slice(1)
         filename = encodeURI(filename)
         var {buf, mime} = readFile(path, dirHandle)
         // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
@@ -73,7 +76,7 @@ async function upload(path, privkey, dirHandle){
             var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
             if(!dTX){
                 // 链上文件存在而D不存在，则单纯做一次重新指向即可
-                var dTask = update_dTask(path, fileTX.id)
+                var dTask = update_dTask(filename, fileTX.id)
                 tasks.push(dTask)
             }else{
                 console.log("找到了链上D记录，无需上传 D record found, skip")
