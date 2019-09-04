@@ -32,11 +32,11 @@ async function upload(path, privkey, dirHandle){
             var filename = file.slice(path.length)
             if(filename.startsWith('/'))filename = filename.slice(1)
             filename = encodeURI(filename)
-            console.log(`正在处理 ${filename}`)
+            console.log(`正在处理 Handling ${filename}`)
             var fileTX = await API.findExist(buf, mime).catch(err=>null)
             if(fileTX){
                 // 如果链上文件存在，那么要判断是否已经存在D指向了
-                console.log(`${filename} - 找到了链上文件数据`)
+                console.log(`${filename} - 找到了链上文件数据 File already on chain`)
                 if(global.debug)console.log(fileTX.id)
                 var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
                 if(!dTX){
@@ -44,7 +44,7 @@ async function upload(path, privkey, dirHandle){
                     var dTask = update_dTask(filename, fileTX.id)
                     tasks.push(dTask)
                 }else{
-                    console.log(`${filename} - 找到了链上D记录，无需上传`)
+                    console.log(`${filename} - 找到了链上D记录，无需上传 D record found, skip`)
                 }
             }else{
                 var fileTasks = upload_FileTask(buf, mime)
@@ -68,7 +68,7 @@ async function upload(path, privkey, dirHandle){
         var fileTX = await API.findExist(buf, mime).catch(err=>null)
         if(fileTX){
             // 如果链上文件存在，那么要判断是否已经存在D指向了
-            console.log("找到了链上文件数据。")
+            console.log("找到了链上文件数据 File already on chain")
             if(global.debug)console.log(fileTX.id)
             var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
             if(!dTX){
@@ -76,7 +76,7 @@ async function upload(path, privkey, dirHandle){
                 var dTask = update_dTask(path, fileTX.id)
                 tasks.push(dTask)
             }else{
-                console.log("找到了链上D记录，无需上传。")
+                console.log("找到了链上D记录，无需上传 D record found, skip")
             }
         }else{
             var fileTasks = upload_FileTask(buf, mime)
@@ -86,7 +86,7 @@ async function upload(path, privkey, dirHandle){
         }
     }
     if(tasks.length==0){
-        console.log("没有新内容需要上传")
+        console.log("没有新内容需要上传 Nothing to upload")
         return tasks
     }
     await fundTasks(tasks, privkey)
@@ -141,7 +141,7 @@ function upload_FileTask(fileBuf, mime){
             type: "Bcat",
             status: "prepend",
             out: {
-                info: "destine",
+                info: "bsvup",
                 mime: mime,
                 encoding: "binary",
                 filename: sha1,
@@ -209,7 +209,8 @@ async function fundTasks(tasks, privkey){
     // 现在检查是否有足够的Satoshis
     if(mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 < 0){
         console.log(`当前地址余额不足以完成上传操作，差额大约为 ${ mapTX.outputAmount - mapTX.inputAmount + mapTX.outputs.length * 150 } satoshis`)
-        console.log("请使用 charge 命令获取转账地址")
+        console.log(`Insuffient satoshis, still need ${ mapTX.outputAmount - mapTX.inputAmount + mapTX.outputs.length * 150 } satoshis`)
+        console.log("请使用 charge 命令获取转账地址 Use charge command to acquire charge address")
         throw new Error("Insuffient satoshis.")
     }
     if(mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000){
@@ -230,7 +231,7 @@ async function fundTasks(tasks, privkey){
         satoshis: spent,
         tx: mapTX
     })
-    console.log(`预计总花费为 ${spent} satoshis`)
+    console.log(`预计总花费 Estimated fee : ${spent} satoshis`)
 }
 
 function pendTasks(tasks, privkey){
@@ -301,7 +302,7 @@ function pendTasks(tasks, privkey){
 
 function readFile(file, dirHandle){
     if(fs.statSync(file).isDirectory()){
-        if(global.debug)console.log("处理目录")
+        if(global.debug)console.log("处理目录 Handling folder")
         switch(dirHandle){
             case "html":
                 return {
