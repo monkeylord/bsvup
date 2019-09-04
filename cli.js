@@ -49,7 +49,8 @@ program
     .option('-t, --type [type]', 'Directory type: dir / html / none  【目录类型，用于表明目录被如何表示】', "html")
     .option('-p, --password [password]', 'Password to unlock privatekey 【解锁私钥的密码】')
     .option('-b, --broadcast', 'Broadcast without asking  【生成后直接广播】', false)
-    .option('-s, --subdirectory', 'Upload to sub directory onchain  【上传到子目录】')
+    .option('-s, --subdirectory [subdirectory]', 'Upload to sub directory onchain  【上传到子目录】', "")
+    .option('-n, --newtask', 'abandon unbroadcasted and start new tasks  【放弃未广播内容】')
 
 var unBroadcast = []
 if(process.argv.length<3){
@@ -58,9 +59,14 @@ if(process.argv.length<3){
     console.log("使用命令 bsvup charge 来提供上链费用")
     console.log("使用命令 bsvup upload 将目录上传到链上")
     console.log("可以使用 bsvup -h 来查看帮助")
+    console.log("Examples: ")
+    console.log("   bsvup init -k L1C8GaB7KepzbvNPpwbtdypjNvSeFd748ewPckGXt4WFkE7R8cUG -p mypassword")
+    console.log("   bsvup upload -f somedirectory -s subpath/anothersubpath -p mypassword -n -b")
+    console.log("   bsvup transfer -a 19vuHzifeejLBqWhGnQ1zmw1TwYzoXcaUM -p mypassword")
 }
-if(fs.existsSync("./.bsv/unbroadcasted.tx.json")){
-    inquirer.prompt([ { 
+// 因为这个判断在parse之前，不能从program里判断，只有自己判断了
+if(process.argv.filter(arg=>(arg=="-n"||arg=="--newtask")).length==0 && fs.existsSync("./.bsv/unbroadcasted.tx.json")){
+    inquirer.prompt([ {
         type: 'confirm', 
         name: 'continue', 
         message: `发现未广播TX，是否继续广播？（Y继续广播，N删除这些未广播TX）\r\nUnbroadcasted TX(s) found, continue broadcasting?(Y continue, N abandon those TXs)`, 
@@ -108,6 +114,7 @@ async function init(){
     else if(program.key && bsv.PrivateKey.isValid(program.key)){
         console.log(`链上地址 onchain address：${bsv.PrivateKey(program.key).toAddress().toString()}`)
         await saveKey(program.key)
+        showQR(bsv.PrivateKey(program.key))
     }else{
         var answers = await inquirer.prompt([ { 
             type: 'String', 
@@ -164,7 +171,7 @@ async function upload(){
     global.quick = (program.quick)?true:false
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
-    var tasks = await logic.upload(path, key, program.type)
+    var tasks = await logic.upload(path, key, program.type, program.subdirectory)
 
     // 准备上传
     unBroadcast = tasks.map(task=>task.tx)

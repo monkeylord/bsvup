@@ -13,7 +13,7 @@ const BASE_TX = 400
 const FEE_PER_KB = 1536
 const DUST_LIMIT = 546
 
-async function upload(path, privkey, dirHandle){
+async function upload(path, privkey, dirHandle, subdir){
     // 准备上传任务
     var tasks = []
     if(fs.statSync(path).isDirectory()){
@@ -30,6 +30,7 @@ async function upload(path, privkey, dirHandle){
             var mime = MIME.lookup(file)
             */
             var filename = file.slice(path.length)
+            if(subdir)filename = (subdir + "/" + filename).replace(/\/\/+/g,'/')
             if(filename.startsWith('/'))filename = filename.slice(1)
             filename = encodeURI(filename)
             console.log(`正在处理 Handling ${filename}`)
@@ -57,6 +58,8 @@ async function upload(path, privkey, dirHandle){
     }else{
         // 先找是否在链上存在
         var filename = path.split("/").reverse()[0].split("\\").reverse()[0]
+        if(subdir)filename = (subdir + "/" + filename).replace(/\/\/+/g,'/')
+        if(filename.startsWith('/'))filename = filename.slice(1)
         filename = encodeURI(filename)
         var {buf, mime} = readFile(path, dirHandle)
         // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
