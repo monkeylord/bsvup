@@ -7,7 +7,6 @@ const BitDB = require('./bitdb.js')
 const MimeLookup = require('mime-lookup');
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
-const logic = require("./logic.js")
 
 function init(){
     if(!fs.existsSync("./.bsv")){
@@ -72,18 +71,15 @@ async function getUTXOs(address){
     })
 }
 
-async function broadcast(tx, nosave = false){
+async function broadcast(tx){
     return new Promise((resolve, reject)=>{
         insight.broadcast(tx.toString(),(err,res)=>{
             if(err){
-                if (!nosave) unBroadcast.push(tx)
                 if(err.message && err.message.message)err=err.message.message
                 console.log(" Insight API return Errors: ")
                 console.log(err)
                 reject([tx.id,"Insight API return Errors: " + err])
             }else{
-                if (!nosave) fs.writeFileSync(`./.bsv/tx/${res}`, tx)
-                console.log(`Broadcasted ${res}`)
                 resolve(res)
             }
         })
@@ -174,48 +170,6 @@ async function getData(tx){
     }
 }
 
-var unBroadcast = []
-async function loadUnbroadcast(){
-    unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx=>bsv.Transaction(tx))
-    return unBroadcast.length
-}
-
-async function prepareUpload(path, key, type){
-    var tasks = await logic.upload(path, key, type)
-
-    // 准备上传
-    unBroadcast = tasks.map(task=>task.tx)
-    tasks.every(task=>{
-        if(global.debug)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
-        return txutil.verifyTX(task.tx)
-    })
-    fs.writeFileSync("./.bsv/unbroadcasted.tx.json",JSON.stringify(unBroadcast))
-
-    return tasks
-}
-
-async function tryBroadcastAll(){
-    var toBroadcast = unBroadcast
-    unBroadcast = []
-    await toBroadcast.reduce((promise,tx,index)=>{
-        return promise.then(p=>{
-            
-            return broadcast(tx.toString()).catch(([txid,err])=>{
-                console.log(`${txid} 广播失败，原因 fail to broadcast:`)
-                console.log(err.split("\n")[0])
-                console.log(err.split("\n")[2])
-            })
-        })
-    },
-    new Promise(r=>r()))
-    if(unBroadcast.length>0){
-        fs.writeFileSync("./.bsv/unbroadcasted.tx.json", JSON.stringify(unBroadcast))
-    }else{
-        if(fs.existsSync("./.bsv/unbroadcasted.tx.json"))fs.unlinkSync("./.bsv/unbroadcasted.tx.json")
-    }
-    return unBroadcast.length
-}
-
 module.exports = {
     init: init,
     loadKey: loadKey,
@@ -224,8 +178,5 @@ module.exports = {
     findD: findD,
     findExist: findExist,
     broadcast: broadcast,
-    getUTXOs: getUTXOs,
-    loadUnbroadcast: loadUnbroadcast,
-    prepareUpload: prepareUpload,
-    tryBroadcastAll: tryBroadcastAll
+    getUTXOs: getUTXOs
 }

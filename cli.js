@@ -11,6 +11,7 @@ const Insight = explorer.Insight
 const insight = new explorer.Insight('https://api.bitindex.network')
 const txutil = require("./txUtil.js")
 const api = require("./api.js")
+const logic = require("./logic.js")
 
 global.debug = false
 global.quick = false
@@ -63,7 +64,7 @@ if(fs.existsSync("./.bsv/unbroadcasted.tx.json")){
         default: true 
     }]).then((answers) => {
         if(answers.continue){
-            console.log(`${api.loadUnbroadcast()} TX(s) loaded.`)
+            console.log(`${logic.loadUnbroadcast()} TX(s) loaded.`)
             console.log("开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...")
             broadcast()
         }else{
@@ -105,7 +106,7 @@ async function init(){
     }
 }
 async function broadcast(){
-    let remaining = await api.broadcastAll()
+    let remaining = await logic.tryBroadcastAll()
     if(remaining>0){
         console.log(`${remaining}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
         console.log(`Not All Transaction Broadcasted, ${remaining} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
@@ -121,7 +122,7 @@ async function upload(){
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
 
-    var tasks = await api.prepareUpload(path, key, program.type)
+    var tasks = await logic.prepareUpload(path, key, program.type)
 
     // 准备上传
     let unBroadcast = tasks.map(task=>task.tx)

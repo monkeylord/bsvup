@@ -13,6 +13,58 @@ const BASE_TX = 400
 const FEE_PER_KB = 1536
 const DUST_LIMIT = 546
 
+var unBroadcast = []
+function loadUnbroadcast(){
+    unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx=>bsv.Transaction(tx))
+    return unBroadcast.length
+}
+
+async function broadcast(tx){
+  try {
+    const res = await API.broadcast(tx)
+    fs.writeFileSync(`./.bsv/tx/${res}`, tx.toString())
+    console.log(`Broadcasted ${res}`)
+    return res
+  } catch(e) {
+    unBroadcast.push(tx)
+    throw e
+  }
+}
+
+async function tryBroadcastAll(){
+    var toBroadcast = unBroadcast
+    unBroadcast = []
+    for (let tx of toBroadcast) {
+      try {
+        await broadcast(tx)
+      } catch([txid,err]) {
+        console.log(`${txid} 广播失败，原因 fail to broadcast:`)
+        console.log(err.split("\n")[0])
+        console.log(err.split("\n")[2])
+      }
+    }
+    if(unBroadcast.length>0){
+        fs.writeFileSync("./.bsv/unbroadcasted.tx.json", JSON.stringify(unBroadcast))
+    }else{
+        if(fs.existsSync("./.bsv/unbroadcasted.tx.json"))fs.unlinkSync("./.bsv/unbroadcasted.tx.json")
+    }
+    return unBroadcast.length
+}
+
+async function prepareUpload(path, key, type){
+    var tasks = await upload(path, key, type)
+
+    // 准备上传
+    unBroadcast = tasks.map(task=>task.tx)
+    tasks.every(task=>{
+        if(global.debug)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
+        return txutil.verifyTX(task.tx)
+    })
+    fs.writeFileSync("./.bsv/unbroadcasted.tx.json",JSON.stringify(unBroadcast))
+
+    return tasks
+}
+
 async function upload(path, privkey, dirHandle){
     // 准备上传任务
     var tasks = []
@@ -338,4 +390,7 @@ function readFiles(path){
     }).reduce((res,item)=>res.concat(item), [])
 }
 
+module.exports.loadUnbroadcast = loadUnbroadcast
+module.exports.tryBroadcastAll = tryBroadcastAll
 module.exports.upload = upload
+module.exports.prepareUpload = prepareUpload
