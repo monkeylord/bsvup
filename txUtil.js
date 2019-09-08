@@ -12,6 +12,7 @@ const BASE_B_SIZE = 300
 const DUST_LIMIT = 546
 const BASE_D_SIZE = 500
 const BASE_MAP_SIZE = 1000
+const TX_SIZE_MAX = 1000000
 
 function verifyTX(tx){
     if(global.debug)console.log(`Verifying ${tx.id}`)
@@ -20,6 +21,7 @@ function verifyTX(tx){
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     }
     else if(!tx.isFullySigned())throw new Error(`${tx.id}: Not fully signed`)
+    else if(tx.toString().length > TX_SIZE_MAX )throw new Error(`${tx.id} Oversized`)
     else return true
     return false
 }
