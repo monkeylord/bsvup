@@ -3,7 +3,7 @@ const bitdb = 'https://genesis.bitdb.network/q/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxt
 const BitDBKey = ['159bcdKY4spcahzfTZhBbFBXrTWpoh4rd3']
 const fetch = require('node-fetch')
 
-function findExist(buffer){
+function findExist(buffer) {
     var sha1 = crypto.createHash('sha1').update(buffer).digest('hex')
     var query = queryHash(sha1)
     // TODO: 向BitDB查询相关TX(s)并校验
@@ -13,15 +13,15 @@ function findExist(buffer){
         headers: { key: BitDBKey }
     };
     return fetch(url, header)
-        .then(r=>r.json())
-        .then(r=>r.c)
-        .then(r=>r.filter(record=>(
+        .then(r => r.json())
+        .then(r => r.c)
+        .then(r => r.filter(record => (
             record.prefix == "15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up" || record.prefix == "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut")
         ))
-        .catch(err=>{console.log(err);return []})
+        .catch(err => { console.log(err); return [] })
 }
 
-function findD(key, address){
+function findD(key, address) {
     var query = queryD(key, address)
     // TODO: 向BitDB查询相关TX(s)并校验
     var b64 = Buffer.from(JSON.stringify(query)).toString('base64');
@@ -30,21 +30,21 @@ function findD(key, address){
         headers: { key: BitDBKey }
     };
     return fetch(url, header)
-        .then(r=>r.json())
-        .then(r=>r.u.concat(r.c))
-        .then(r=>r.sort((a,b)=>b.sequence - a.sequence))
+        .then(r => r.json())
+        .then(r => r.u.concat(r.c))
+        .then(r => r.sort((a, b) => b.sequence - a.sequence))
         //.then(r=>{console.log(r);return r})
         //.then(r=>(r.length>0)?r[0]:null)
-        .catch(err=>console.log(err))
+        .catch(err => console.log(err))
 }
 
-function queryHash(hash){
+function queryHash(hash) {
     // B or Bcat
     return {
         "v": 3,
         "q": {
             "find": {
-                "$or": [{"out.s1": "15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up"},{"out.s1": "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut"}],
+                "$or": [{ "out.s1": "15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up" }, { "out.s1": "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut" }],
                 "out.s5": hash
             },
         },
@@ -53,22 +53,22 @@ function queryHash(hash){
         }
     }
 }
-function queryTXID(txid){
+function queryTXID(txid) {
     return {
         "v": 3,
         "q": {
-            "find": { "tx.h": txid},
+            "find": { "tx.h": txid },
         }
     }
 }
 
-function queryD(key, address){
+function queryD(key, address) {
     return {
         "v": 3,
         "q": {
             "find": {
-                "in.e.a": address?address:undefined,
-                "out.s2": key?key:undefined,
+                "in.e.a": address ? address : undefined,
+                "out.s2": key ? key : undefined,
                 "out.s1": "19iG3WTYSsbyos3uJ733yK4zEioi1FesNU"
             }
         },

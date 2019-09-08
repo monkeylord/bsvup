@@ -14,87 +14,87 @@ const BASE_D_SIZE = 500
 const BASE_MAP_SIZE = 1000
 const TX_SIZE_MAX = 1000000
 
-function verifyTX(tx){
-    if(global.debug)console.log(`Verifying ${tx.id}`)
-    if(tx.inputAmount - tx.outputAmount < tx.toString().length / 2 ){
-        if(global.debug)console.log(JSON.stringify(tx))
+function verifyTX(tx) {
+    if (global.debug) console.log(`Verifying ${tx.id}`)
+    if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
+        if (global.debug) console.log(JSON.stringify(tx))
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     }
-    else if(!tx.isFullySigned())throw new Error(`${tx.id}: Not fully signed`)
-    else if(tx.toString().length > TX_SIZE_MAX )throw new Error(`${tx.id} Oversized`)
+    else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
+    else if (tx.toString().length > TX_SIZE_MAX) throw new Error(`${tx.id} Oversized`)
     else return true
     return false
 }
 
 
-function prepareUtxos(target_utxos, original_utxos, privKey){
+function prepareUtxos(target_utxos, original_utxos, privKey) {
     // 先不进行优化了，以后再说
     var tx = bsv.Transaction()
-    original_utxos.forEach(outxo=>tx.from(outxo))
-    var utxos=target_utxos.map(tutxo=>{
-        tx.to(privKey.toAddress(),tutxo.satoshis)
+    original_utxos.forEach(outxo => tx.from(outxo))
+    var utxos = target_utxos.map(tutxo => {
+        tx.to(privKey.toAddress(), tutxo.satoshis)
         return {
             key: tutxo.key,
             tx: tx,
-            vout: tx.outputs.length-1,
-            address:tx.outputs[tx.outputs.length-1].script.toAddress().toString(),
-            script:tx.outputs[tx.outputs.length-1].script.toHex(),
-            satoshis:tx.outputs[tx.outputs.length-1].satoshis,    
+            vout: tx.outputs.length - 1,
+            address: tx.outputs[tx.outputs.length - 1].script.toAddress().toString(),
+            script: tx.outputs[tx.outputs.length - 1].script.toHex(),
+            satoshis: tx.outputs[tx.outputs.length - 1].satoshis,
         }
     })
-    if(tx.inputAmount - tx.outputAmount < 0)throw new Error("Insuffient satoshis.")
-    if(tx.inputAmount - tx.outputAmount - tx.toString().length/2 > 1000){
+    if (tx.inputAmount - tx.outputAmount < 0) throw new Error("Insuffient satoshis.")
+    if (tx.inputAmount - tx.outputAmount - tx.toString().length / 2 > 1000) {
         tx.change(privKey.toAddress())
         tx.feePerKb(FEE_PER_KB)
     }
     tx.sign(privKey)
-    utxos.forEach(utxo=>utxo.txid=utxo.tx.id)
+    utxos.forEach(utxo => utxo.txid = utxo.tx.id)
     return {
         maptxs: [tx],
         utxos: utxos
     }
 }
 
-function retrieveUTXO(transaction, vout){
+function retrieveUTXO(transaction, vout) {
     var tx = bsv.Transaction(transaction)
     return {
         txid: tx.id,
         vout: vout,
-        address:tx.outputs[vout].script.toAddress().toString(),
-        script:tx.outputs[vout].script.toHex(),
-        satoshis:tx.outputs[vout].satoshis,
+        address: tx.outputs[vout].script.toAddress().toString(),
+        script: tx.outputs[vout].script.toHex(),
+        satoshis: tx.outputs[vout].satoshis,
     }
 }
 
-function buildFileTX(utxo, filename, buffer, mime, privKey){
+function buildFileTX(utxo, filename, buffer, mime, privKey) {
     var md5 = crypto.createHash('md5').update(buffer).digest('hex')
     // prepare utxo for D TX
-    var target_utxos = [{key:"D",satoshis:DUST_LIMIT}]
+    var target_utxos = [{ key: "D", satoshis: DUST_LIMIT }]
 
     // prepare utxos and build TXs
-    if(buffer.length > CHUNK_SIZE){
+    if (buffer.length > CHUNK_SIZE) {
         // should use BCAT
 
         // prepare chunks
         var bufferChunks = []
-        while(buffer.length > 0){
+        while (buffer.length > 0) {
             bufferChunks.push(buffer.slice(0, CHUNK_SIZE))
             buffer = buffer.slice(CHUNK_SIZE)
         }
         // prepare utxos for B TXs
-        var requires = [{key:"bcat", satoshis: Math.max(BASE_B_SIZE + 50 * bufferChunks.length, DUST_LIMIT)}].concat(bufferChunks.map((bufferChunk,i)=>{
-            return {key: i, satoshis: Math.max(bufferChunk.length + BASE_BPART_SIZE, DUST_LIMIT)}
+        var requires = [{ key: "bcat", satoshis: Math.max(BASE_B_SIZE + 50 * bufferChunks.length, DUST_LIMIT) }].concat(bufferChunks.map((bufferChunk, i) => {
+            return { key: i, satoshis: Math.max(bufferChunk.length + BASE_BPART_SIZE, DUST_LIMIT) }
         }))
-        
+
         // OK, split utxo now
         target_utxos = target_utxos.concat(requires)
-        var {maptxs, utxos} = prepareUtxos(target_utxos, [utxo], privKey)
+        var { maptxs, utxos } = prepareUtxos(target_utxos, [utxo], privKey)
 
         var dUtxo = utxos[0]
         var bUtxos = utxos.slice(1)
-        
+
         // Build BcatPart TXs
-        var chunktxs = bUtxos.slice(1).map(utxo=>{
+        var chunktxs = bUtxos.slice(1).map(utxo => {
             var tx = bsv.Transaction()
             tx.from(utxo)
             tx.addOutput(buildBCatPartOut({
@@ -113,8 +113,8 @@ function buildFileTX(utxo, filename, buffer, mime, privKey){
             mime: mime,
             encoding: "binary",
             filename: md5,
-            flag: Buffer.from("00","hex"),
-            chunks: chunktxs.map(chunktx=>chunktx.id)
+            flag: Buffer.from("00", "hex"),
+            chunks: chunktxs.map(chunktx => chunktx.id)
         }))
         bcattx.sign(privKey)
         // Build D TX
@@ -126,14 +126,14 @@ function buildFileTX(utxo, filename, buffer, mime, privKey){
             maptx: maptxs,
             chunks: chunktxs
         }
-    }else{
+    } else {
         // should use B
         // prepare B UTXO
-        var requires = [{key:"b", satoshis: BASE_B_SIZE + buffer.length}]
+        var requires = [{ key: "b", satoshis: BASE_B_SIZE + buffer.length }]
 
         // OK, split utxo now
         target_utxos = target_utxos.concat(requires)
-        var {maptxs, utxos} = prepareUtxos(target_utxos, [utxo], privKey)
+        var { maptxs, utxos } = prepareUtxos(target_utxos, [utxo], privKey)
 
         var dUtxo = utxos[0]
         var bUtxo = utxos[1]
@@ -158,8 +158,8 @@ function buildFileTX(utxo, filename, buffer, mime, privKey){
     }
 }
 
-function buildDTX(utxo, key, value, privKey){
-    if(global.debug)console.log(key)
+function buildDTX(utxo, key, value, privKey) {
+    if (global.debug) console.log(key)
     var tx = bsv.Transaction()
     tx.from(utxo)
     tx.addOutput(buildDOut({
@@ -172,7 +172,7 @@ function buildDTX(utxo, key, value, privKey){
     return tx
 }
 
-function buildDOut(dPayload){
+function buildDOut(dPayload) {
     var dScript = bsv.Script.buildDataOut([
         "19iG3WTYSsbyos3uJ733yK4zEioi1FesNU",
         encodeURI(dPayload.key),
@@ -186,7 +186,7 @@ function buildDOut(dPayload){
     })
 }
 
-function buildBCatOut(bcatPayload){
+function buildBCatOut(bcatPayload) {
     var dScript = bsv.Script.buildDataOut([
         "15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up",
         bcatPayload.info,
@@ -194,14 +194,14 @@ function buildBCatOut(bcatPayload){
         bcatPayload.encoding,
         bcatPayload.filename,
         bcatPayload.flag
-    ].concat(bcatPayload.chunks.map(txid=>Buffer.from(txid,"hex"))))
+    ].concat(bcatPayload.chunks.map(txid => Buffer.from(txid, "hex"))))
     return bsv.Transaction.Output({
         satoshis: 0,
         script: dScript.toHex()
     })
 }
 
-function buildBCatPartOut(bcatPartPayload){
+function buildBCatPartOut(bcatPartPayload) {
     var bcatPartScript = bsv.Script.buildDataOut([
         "1ChDHzdd1H4wSjgGMHyndZm6qxEDGjqpJL",
         bcatPartPayload.data
@@ -212,7 +212,7 @@ function buildBCatPartOut(bcatPartPayload){
     })
 }
 
-function buildBOut(bPayload){
+function buildBOut(bPayload) {
     var bScript = bsv.Script.buildDataOut([
         "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut",
         bPayload.data,
@@ -248,8 +248,8 @@ var testBCatPayload = {
     "encoding": "utf-8",
     "filename": "demo.txt",
     "flag": "none",
-    "chunks":["8d29c20fd086ad5aa859037eb9bb25aaf6ebb84706965c4c662bbdb40e9cba02",
-              "8d29c20fd086ad5aa859037eb9bb25aaf6ebb84706965c4c662bbdb40e9cba02"]
+    "chunks": ["8d29c20fd086ad5aa859037eb9bb25aaf6ebb84706965c4c662bbdb40e9cba02",
+        "8d29c20fd086ad5aa859037eb9bb25aaf6ebb84706965c4c662bbdb40e9cba02"]
 }
 
 var testDPayload = {

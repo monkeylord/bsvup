@@ -13,6 +13,7 @@ const BASE_TX = 400
 const FEE_PER_KB = 1536
 const DUST_LIMIT = 546
 const MAX_OUTPUT = 1000
+const SIZE_PER_OUTPUT = 100
 
 async function upload(path, privkey, dirHandle, subdir) {
     // 准备上传任务
@@ -193,6 +194,15 @@ function update_dTask(key, value) {
 async function fundTasks(tasks, privkey) {
     // 给任务添加的UTXO格式中应包含privkey
     var utxos = await API.getUTXOs(privkey.toAddress().toString())
+    // 现在检查是否有足够的Satoshis
+    var satoshisRequired = tasks.reduce((totalRequired, task)=>totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
+    var satoshisProvided = utxos.reduce((totalProvided, utxo)=>totalProvided += (utxo.amount)? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
+    if (satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT < 0) {
+        console.log(`当前地址余额不足以完成上传操作，差额大约为 ${satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT} satoshis`)
+        console.log(`Insuffient satoshis, still need ${satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT} satoshis`)
+        console.log("请使用 charge 命令获取转账地址 Use charge command to acquire charge address")
+        throw new Error("Insuffient satoshis.")
+    }
     var mytasks = tasks
     var myUtxos = utxos
     var totalSpent = 0
@@ -217,13 +227,6 @@ async function fundTasks(tasks, privkey) {
                 satoshis: mapTX.outputs[mapTX.outputs.length - 1].satoshis
             }
         })
-        // 现在检查是否有足够的Satoshis
-        if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 < 0) {
-            console.log(`当前地址余额不足以完成上传操作，差额大约为 ${mapTX.outputAmount - mapTX.inputAmount + mapTX.outputs.length * 150} satoshis`)
-            console.log(`Insuffient satoshis, still need ${mapTX.outputAmount - mapTX.inputAmount + mapTX.outputs.length * 150} satoshis`)
-            console.log("请使用 charge 命令获取转账地址 Use charge command to acquire charge address")
-            throw new Error("Insuffient satoshis.")
-        }
         if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000) {
             mapTX.change(privkey.toAddress())
             mapTX.feePerKb(FEE_PER_KB)
@@ -245,7 +248,7 @@ async function fundTasks(tasks, privkey) {
             tx: mapTX
         })
         // ChangeOutput as new UTXO
-        if(mapTX.getChangeOutput()){
+        if (mapTX.getChangeOutput()) {
             myUtxos = [{
                 txid: mapTX.id,
                 vout: mapTX.outputs.length - 1,
@@ -253,15 +256,15 @@ async function fundTasks(tasks, privkey) {
                 script: mapTX.outputs[mapTX.outputs.length - 1].script.toHex(),
                 satoshis: mapTX.outputs[mapTX.outputs.length - 1].satoshis
             }]
-        }else{
+        } else {
             // This means insuffient Satoshis
-            console.log("Insuffient Satoshis when funding tasks")
+            if(global.debug)console.log("Insuffient Satoshis when funding tasks")
             myUtxos = []
         }
     }
 
     // 开始压入mapTX，mapTXs放到前面，因为它们是接下来一切TX的父TX，需要最先广播，否则会报Missing input
-    mapTasks.forEach(task=>{
+    mapTasks.forEach(task => {
         tasks.unshift(task)
     })
 
