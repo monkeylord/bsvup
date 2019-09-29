@@ -12,8 +12,9 @@ const insight = new explorer.Insight('https://api.bitindex.network')
 const txutil = require("./txUtil.js")
 const api = require("./api.js")
 const logic = require("./logic.js")
+const Cache = require("./cache.js")
 
-global.debug = false
+global.verbose = false
 global.quick = false
 
 var program = require('commander')
@@ -41,7 +42,7 @@ program
     .action(transfer)
 
 program
-    //.version(require('./package.json').version)
+    .version(require('./package.json').version)
     .option('-f, --file [file]', 'File/Directory to upload 【指定要上传的文件/目录】')
     .option('-k, --key [private key]', 'Appoint private key mannually 【指定使用的私钥】')
     .option('-q, --quick', 'Skip file existence check  【快速上传，不检查文件是否已在链上】')
@@ -51,6 +52,7 @@ program
     .option('-b, --broadcast', 'Broadcast without asking  【生成后直接广播】', false)
     .option('-s, --subdirectory [subdirectory]', 'Upload to sub directory onchain  【上传到子目录】', "")
     .option('-n, --newtask', 'abandon unbroadcasted and start new tasks  【放弃未广播内容】')
+    .option('-v, --verbose', 'show detailed infomation  【显示详细信息】')
 
 var unBroadcast = []
 if (process.argv.length < 3) {
@@ -74,7 +76,7 @@ if (process.argv.filter(arg => (arg == "-n" || arg == "--newtask")).length == 0 
     }]).then((answers) => {
         if (answers.continue) {
             //unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx => bsv.Transaction(tx))
-            console.log(`${logic.loadUnbroadcast()} TX(s) loaded.`)
+            console.log(`${Cache.loadUnbroadcast().length} TX(s) loaded.`)
             console.log("开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...")
             broadcast()
         } else {
@@ -88,12 +90,12 @@ if (process.argv.filter(arg => (arg == "-n" || arg == "--newtask")).length == 0 
 }
 
 async function init(){
-    api.init()
+    Cache.init()
 
     // 记录私钥，并产生地址
-    if (fs.existsSync("./.bsv/key")) {
+    if (Cache.isKeyExist()) {
         console.log("当前目录已经初始化过，如需重新初始化，请删除 .bsv 目录（删除前注意备份私钥）。")
-        console.log("This directory is already initialize, delete .bsv if you want to re-initialize.(Backup your private key before deletion)")
+        console.log("This directory is already initialize, delete .bsv if you want to re-initialize.(Important: Backup your private key before deletion)")
         console.log("需要查看充值地址可使用密码解锁。")
         console.log("Unlock private key to see charge address.")
         charge()
@@ -117,7 +119,7 @@ async function init(){
     }
 }
 async function broadcast(){
-    let remaining = await logic.tryBroadcastAll()
+    let remaining = await api.tryBroadcastAll().length
     if(remaining>0){
         console.log(`${remaining}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
         console.log(`Not All Transaction Broadcasted, ${remaining} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
@@ -130,15 +132,14 @@ async function broadcast(){
 
 async function upload(){
     global.quick = (program.quick)?true:false
+    global.verbose = (program.verbose)?true:false
+
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
 
     var tasks = await logic.prepareUpload(path, key, program.type, program.subdirectory)
 
-    // 准备上传
-    let unBroadcast = tasks.map(task=>task.tx)
-
-    // 做一些描述
+    // Briefing
     console.log("----------------------------------------------------------------------")
     console.log(`链上地址为 Address: ${key.toAddress().toString()}`)
     console.log("----------------------------------------------------------------------")
@@ -153,8 +154,12 @@ async function upload(){
     console.log(` Bcat: ${tasks.filter(task => task.type == "Bcat").length} TX(s)`)
     console.log(` BcatPart: ${tasks.filter(task => task.type == "BcatPart").length} TX(s)`)
     console.log(` D: ${tasks.filter(task => task.type == "D").length} TX(s)`)
-    console.log(`共计 Total ${unBroadcast.length} TX(s)`)
+    console.log(`共计 Total ${tasks.length} TX(s)`)
     console.log("----------------------------------------------------------------------")
+
+    // Ready to broadcast
+    let unBroadcast = logic.getTXs(tasks)
+
     // 没有内容需要上传的话，就直接返回了
     if (unBroadcast.length == 0) return
     // 上传确认
@@ -169,6 +174,7 @@ async function upload(){
         toBroadcast = answers.broadcast
     }
     if (toBroadcast) {
+        Cache.saveUnbroadcast(unBroadcast)
         console.log("开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...")
         broadcast()
     }
@@ -224,7 +230,7 @@ async function loadKey(){
         message: "请输入密码以解锁私钥 Password to unlock private key:", 
     }])
     var password = answers.password
-    return api.loadKey(password)
+    return Cache.loadKey(password)
 }
 async function saveKey(privkey){
     var answers = await inquirer.prompt([ { 
@@ -234,5 +240,5 @@ async function saveKey(privkey){
         message: "请设置密码以加密私钥 Set key unlock password:", 
     }])
     var password = answers.password
-    api.saveKey(privkey, password)
+    Cache.saveKey(privkey, password)
 }

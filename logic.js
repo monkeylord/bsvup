@@ -1,8 +1,30 @@
+/*
+    This module handle core task logic.
+    This module use API and don't care how to broadcast, read file data nor access blockchain.
+
+    There must be tasks because there are dependencies.
+    You need previous TXID to build next transaction.
+    However, you need to know some information before necessary calculation like target UTXOs or Satoshis required.
+
+    Task lifecircle:
+    - prepend (Task created but data is not fully determined because some data depend on other task)
+    - ready (Data is fully determined, but transaction is not created or signed)
+    - pended (Transaction is built and fully signed)
+    - * broadcasted (Transaction is broadcasted)
+
+    Uploading precedure:
+    - create B/Bcat/D Task from file data
+    - create Map Task to split approperiate UTXOs to fund previous tasks
+    - pend tasks and handle dependencies
+    - * broadcast
+*/
+
 const fs = require('fs')
 const bsv = require('bsv')
 const crypto = require("crypto")
 const API = require('./api.js')
 const txutil = require("./txUtil.js")
+const Cache = require("./cache.js")
 
 
 const MimeLookup = require('mime-lookup');
@@ -15,68 +37,49 @@ const DUST_LIMIT = 546
 const MAX_OUTPUT = 1000
 const SIZE_PER_OUTPUT = 100
 
-var unBroadcast = []
-function loadUnbroadcast(){
-    unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx=>bsv.Transaction(tx))
-    return unBroadcast.length
-}
+/*
+    Wrap task lifecircle, create tasks and make tasks ready to broadcast
+*/
+async function prepareUpload(path, privkey, type, subdir){
+    // create tasks
+    var tasks = await createUploadTasks(path, privkey, type, subdir)
+    // fund tasks (Throw insuffient satoshis error if not enough)
+    await fundTasks(tasks, privkey)
+    // pend tasks (known issue: Customized tasks may dead loop for dependencies cannot be solved)
+    pendTasks(tasks)
+    // verify tasks (will throw error if failed)
+    verifyTasks(tasks)
 
-async function broadcast(tx){
-  try {
-    const res = await API.broadcast(tx)
-    fs.writeFileSync(`./.bsv/tx/${res}`, tx.toString())
-    console.log(`Broadcasted ${res}`)
-    return res
-  } catch(e) {
-    unBroadcast.push(tx)
-    throw e
-  }
-}
-
-async function tryBroadcastAll(){
-    var toBroadcast = unBroadcast
-    unBroadcast = []
-    for (let tx of toBroadcast) {
-      try {
-        await broadcast(tx)
-      } catch([txid,err]) {
-        console.log(`${txid} 广播失败，原因 fail to broadcast:`)
-        console.log(err.split("\n")[0])
-        console.log(err.split("\n")[2])
-      }
-    }
-    if(unBroadcast.length>0){
-        fs.writeFileSync("./.bsv/unbroadcasted.tx.json", JSON.stringify(unBroadcast))
-    }else{
-        if(fs.existsSync("./.bsv/unbroadcasted.tx.json"))fs.unlinkSync("./.bsv/unbroadcasted.tx.json")
-    }
-    return unBroadcast.length
-}
-
-async function prepareUpload(path, key, type, subdir){
-    var tasks = await upload(path, key, type, subdir)
-
-    // 准备上传
-    unBroadcast = tasks.map(task=>task.tx)
-    tasks.every(task=>{
-        if(global.debug)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
-        return txutil.verifyTX(task.tx)
-    })
-    fs.writeFileSync("./.bsv/unbroadcasted.tx.json",JSON.stringify(unBroadcast))
-
+    // ready to be broadcast
     return tasks
 }
 
-async function upload(path, privkey, dirHandle, subdir){
+/*
+    Create file/directory upload tasks
+    Read all files from API first.
+    Check if file data already onchain.
+    Create necessary tasks
+
+    Input
+    - File data (path, how to handle directory, sub directory for D)
+    - PrivateKey
+    Output
+    - Tasks
+
+    TODO:
+    - read from prepared filedata (may not from fs), a filedata item may be filename, buffer, targetname, mime
+    - other encoding (I think binary is OK for everything, but someone may want gzip)
+*/
+async function createUploadTasks(path, privkey, dirHandle, subdir){
     // 准备上传任务
     var tasks = []
-    if (fs.statSync(path).isDirectory()) {
-        var files = readFiles(path)
+    if (API.isDirectory(path)) {
+        var files = API.readFiles(path)
         // 处理文件上传任务
         while (files.length > 0) {
             var file = files.pop()
-            var { buf, mime } = readFile(file, dirHandle)
-            if (global.debug) console.log(mime)
+            var { buf, mime } = API.readFile(file, dirHandle)
+            if (global.verbose) console.log(mime)
             // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
             if (!mime) continue
             /*
@@ -92,7 +95,7 @@ async function upload(path, privkey, dirHandle, subdir){
             if (fileTX) {
                 // 如果链上文件存在，那么要判断是否已经存在D指向了
                 console.log(`${filename} - 找到了链上文件数据 File already on chain`)
-                if (global.debug) console.log(fileTX.id)
+                if (global.verbose) console.log(fileTX.id)
                 var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
                 if (!dTX) {
                     // 链上文件存在而D不存在，则单纯做一次重新指向即可
@@ -115,7 +118,7 @@ async function upload(path, privkey, dirHandle, subdir){
         if (subdir) filename = (subdir + "/" + filename).replace(/\/\/+/g, '/')
         if (filename.startsWith('/')) filename = filename.slice(1)
         filename = encodeURI(filename)
-        var { buf, mime } = readFile(path, dirHandle)
+        var { buf, mime } = API.readFile(path, dirHandle)
         // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
         if (!mime) return []
         /*
@@ -126,7 +129,7 @@ async function upload(path, privkey, dirHandle, subdir){
         if (fileTX) {
             // 如果链上文件存在，那么要判断是否已经存在D指向了
             console.log("找到了链上文件数据 File already on chain")
-            if (global.debug) console.log(fileTX.id)
+            if (global.verbose) console.log(fileTX.id)
             var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
             if (!dTX) {
                 // 链上文件存在而D不存在，则单纯做一次重新指向即可
@@ -146,11 +149,21 @@ async function upload(path, privkey, dirHandle, subdir){
         console.log("没有新内容需要上传 Nothing to upload")
         return tasks
     }
-    await fundTasks(tasks, privkey)
-    pendTasks(tasks)
     return tasks
 }
 
+/*
+    Create file task, B for small file, Bcat for large file
+    B/BcatPart output depend on nothing, so it's ready when created.
+    However Bcat output depend on BcatPart, that we cannot know those txid before those tasks pended.
+
+    Input
+    - File buffer
+    - MIME type
+
+    Output
+    - Tasks
+*/
 function upload_FileTask(fileBuf, mime) {
     /*
     var fileBuf = fs.readFileSync(filename)
@@ -214,6 +227,17 @@ function upload_FileTask(fileBuf, mime) {
     return tasks
 }
 
+/*
+    Create D Task that depend on tasks.
+    We assume the value(txid) will be provided by the first depended task.
+
+    Input
+    - D key
+    - Tasks depended
+
+    Output
+    - Task
+*/
 function upload_dTask(key, depTasks) {
     // 假设：B TX的依赖在depTasks中第一个
     return {
@@ -229,6 +253,18 @@ function upload_dTask(key, depTasks) {
         satoshis: key.length + 64
     }
 }
+
+/*
+    Create D Task.
+    This is used to point a key to value we know already.
+
+    Input
+    - D key
+    - D value
+
+    Output
+    - Task
+*/
 function update_dTask(key, value) {
     return {
         type: "D",
@@ -243,6 +279,18 @@ function update_dTask(key, value) {
     }
 }
 
+/*
+    Create MAP task and fund given tasks, by spliting UTXOs into UTXOs tasks needed.
+    This procedure create MAP tasks that take current UTXOs as inputs, and approperiate UTXOs as outputs.
+    Map tasks will be added into tasks given.
+    
+    Input
+    - Tasks
+    - PrivateKey
+    
+    Output
+    - Funded tasks with map tasks added
+*/
 async function fundTasks(tasks, privkey) {
     // 给任务添加的UTXO格式中应包含privkey
     var utxos = await API.getUTXOs(privkey.toAddress().toString())
@@ -260,6 +308,7 @@ async function fundTasks(tasks, privkey) {
     var totalSpent = 0
     var mapTasks = []
     while (mytasks.length > 0) {
+        // To avoid create oversized TX
         var currentTasks = mytasks.slice(0, MAX_OUTPUT)
         mytasks = mytasks.slice(MAX_OUTPUT)
         // 创建MapTX
@@ -310,19 +359,33 @@ async function fundTasks(tasks, privkey) {
             }]
         } else {
             // This means insuffient Satoshis
-            if(global.debug)console.log("Insuffient Satoshis when funding tasks")
+            if(global.verbose)console.log("Insuffient Satoshis when funding tasks")
             myUtxos = []
         }
     }
 
     // 开始压入mapTX，mapTXs放到前面，因为它们是接下来一切TX的父TX，需要最先广播，否则会报Missing input
+    // Map transactions need to be broadcast first, or there will be "Missing Input".
     mapTasks.forEach(task => {
         tasks.unshift(task)
     })
 
     console.log(`预计总花费 Estimated fee : ${totalSpent} satoshis`)
+
+    return tasks
 }
 
+/*
+    Pend tasks
+
+    Input
+    - Funded tasks
+    - PrivateKey (though funded tasks has private key, but we may need privatekey in the future)
+
+    Output
+    - Pended tasks
+
+*/
 function pendTasks(tasks, privkey) {
     // 假设：不存在依赖死锁或循环问题。所以可以通过有限次循环完成所有TX的生成
     while (!tasks.every(task => task.status == "pended")) {
@@ -376,7 +439,7 @@ function pendTasks(tasks, privkey) {
                     case "D":
                         // 假设：B TX的依赖在depTasks中第一个
                         task.out.value = task.deps.filter(task => (task.type == "B" || task.type == "Bcat"))[0].tx.id
-                        if (global.debug) console.log(task.deps.map(task => task.tx.id))
+                        if (global.verbose) console.log(task.deps.map(task => task.tx.id))
                         break;
                     default:
                         // 按说只有Bcat和D要处理依赖。所以不应该执行到这里。
@@ -387,47 +450,43 @@ function pendTasks(tasks, privkey) {
             }
         })
     }
+    return tasks
 }
 
-function readFile(file, dirHandle) {
-    if (fs.statSync(file).isDirectory()) {
-        if (global.debug) console.log("处理目录 Handling folder")
-        switch (dirHandle) {
-            case "html":
-                return {
-                    buf: Buffer.from('<head><meta http-equiv="refresh" content="0;url=index.html"></head>'),
-                    mime: "text/html"
-                }
-            case "dir":
-                // 创建目录浏览
-                var files = fs.readdirSync(file).map(item => (fs.statSync(file + "/" + item).isDirectory()) ? item + "/" : item)
-                return {
-                    buf: Buffer.from(`<head></head><body><script language="javascript" type="text/javascript">var files = ${JSON.stringify(files)};document.write("<p><a href='../'>..</a></p>");files.forEach(file=>document.write("<p><a href='" + file + "'>" + file + "</a></p>"));</script></body>`),
-                    mime: "text/html"
-                }
-            default:
-                return {}
-        }
-    } else {
-        var buf = fs.readFileSync(file)
-        var mime = MIME.lookup(file)
-        return {
-            buf: buf,
-            mime: mime
-        }
-    }
+/*
+    Verify tasks
+
+    Input
+    - Tasks
+    
+    Output
+    - True if all tasks valid
+*/
+function verifyTasks(tasks){
+    return tasks.every(task=>{
+        if(global.verbose)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
+        return txutil.verifyTX(task.tx)
+    })
 }
 
-function readFiles(path) {
-    path = path || "."
-    return fs.readdirSync(path).map(item => {
-        if (item == ".bsv") return []
-        var itemPath = path + "/" + item
-        return (fs.statSync(itemPath).isDirectory()) ? readFiles(itemPath).concat([itemPath + "/"]) : [itemPath]
-    }).reduce((res, item) => res.concat(item), [])
+/*
+    Extract TX from pended tasks
+
+    Input
+    - Tasks
+
+    Output
+    - TXs
+*/
+function getTXs(tasks){
+    return tasks.map(task=>task.tx)
 }
 
-module.exports.loadUnbroadcast = loadUnbroadcast
-module.exports.tryBroadcastAll = tryBroadcastAll
-module.exports.upload = upload
-module.exports.prepareUpload = prepareUpload
+module.exports = {
+    createUploadTasks : createUploadTasks,
+    fundTasks : fundTasks,
+    pendTasks: pendTasks,
+    verifyTasks: verifyTasks,
+    getTXs : getTXs,
+    prepareUpload : prepareUpload
+}

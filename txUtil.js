@@ -1,3 +1,12 @@
+/*
+    This module handle handle transactions
+    - UTXO split
+    - Transaction verification
+    - Retrieve UTXO from transaction
+    - Build BitCom output
+        - B/Bcat/BcatPart
+        - D
+*/
 const bsv = require('bsv')
 const ibe = require('bitcoin-ibe')
 const MimeLookup = require('mime-lookup');
@@ -14,10 +23,26 @@ const BASE_D_SIZE = 500
 const BASE_MAP_SIZE = 1000
 const TX_SIZE_MAX = 1000000
 
+
+/*
+    Check if transaction valid on basic concensus
+    - Output Amount > Input Amount
+    - Enough Fees (TODO)
+    - Fully Signed
+    - TX Size < 1MB
+    - Output Script < 99KB (TODO)
+    - Non-dust (TODO)
+
+    Input
+    - (bsv.Transaction) Transaction
+
+    Output
+    - (boolean) is Transaction valid
+*/
 function verifyTX(tx) {
-    if (global.debug) console.log(`Verifying ${tx.id}`)
+    if (global.verbose) console.log(`Verifying ${tx.id}`)
     if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
-        if (global.debug) console.log(JSON.stringify(tx))
+        if (global.verbose) console.log(JSON.stringify(tx))
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     }
     else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
@@ -26,7 +51,22 @@ function verifyTX(tx) {
     return false
 }
 
-
+/*
+    Depleted!
+    
+    Split original UTXOs into target UTXOs.
+    This procedure create MAP transaction that take original UTXOs as inputs, and target UTXOs as outputs.
+    
+    Input
+    - (Object Array) Target UTXOs
+        Example: [{key: "String Or Object", satoshis: 1000}]
+    - (UTXO Array) Original UTXOs
+    - (BSV PrivateKey) PrivateKey for UTXOs
+    
+    Output
+    - (BSV Transaction) Map TX
+    - (UTXO with target key Array) UTXOs
+*/
 function prepareUtxos(target_utxos, original_utxos, privKey) {
     // 先不进行优化了，以后再说
     var tx = bsv.Transaction()
@@ -55,6 +95,10 @@ function prepareUtxos(target_utxos, original_utxos, privKey) {
     }
 }
 
+/*
+    Retrieve UTXO in transaction
+*/
+
 function retrieveUTXO(transaction, vout) {
     var tx = bsv.Transaction(transaction)
     return {
@@ -66,100 +110,8 @@ function retrieveUTXO(transaction, vout) {
     }
 }
 
-function buildFileTX(utxo, filename, buffer, mime, privKey) {
-    var md5 = crypto.createHash('md5').update(buffer).digest('hex')
-    // prepare utxo for D TX
-    var target_utxos = [{ key: "D", satoshis: DUST_LIMIT }]
-
-    // prepare utxos and build TXs
-    if (buffer.length > CHUNK_SIZE) {
-        // should use BCAT
-
-        // prepare chunks
-        var bufferChunks = []
-        while (buffer.length > 0) {
-            bufferChunks.push(buffer.slice(0, CHUNK_SIZE))
-            buffer = buffer.slice(CHUNK_SIZE)
-        }
-        // prepare utxos for B TXs
-        var requires = [{ key: "bcat", satoshis: Math.max(BASE_B_SIZE + 50 * bufferChunks.length, DUST_LIMIT) }].concat(bufferChunks.map((bufferChunk, i) => {
-            return { key: i, satoshis: Math.max(bufferChunk.length + BASE_BPART_SIZE, DUST_LIMIT) }
-        }))
-
-        // OK, split utxo now
-        target_utxos = target_utxos.concat(requires)
-        var { maptxs, utxos } = prepareUtxos(target_utxos, [utxo], privKey)
-
-        var dUtxo = utxos[0]
-        var bUtxos = utxos.slice(1)
-
-        // Build BcatPart TXs
-        var chunktxs = bUtxos.slice(1).map(utxo => {
-            var tx = bsv.Transaction()
-            tx.from(utxo)
-            tx.addOutput(buildBCatPartOut({
-                data: bufferChunks[utxo.key]
-            }))
-            tx.feePerKb(FEE_PER_KB)
-            tx.change(privKey.toAddress())
-            tx.sign(privKey)
-            return tx
-        })
-        // Build Bcat TX
-        var bcattx = bsv.Transaction()
-        bcattx.from(bUtxos[0])
-        bcattx.addOutput(buildBCatOut({
-            info: "destine",
-            mime: mime,
-            encoding: "binary",
-            filename: md5,
-            flag: Buffer.from("00", "hex"),
-            chunks: chunktxs.map(chunktx => chunktx.id)
-        }))
-        bcattx.sign(privKey)
-        // Build D TX
-        var dtx = buildDTX(dUtxo, filename, bcattx.id, privKey)
-        // return all TX
-        return {
-            btx: bcattx,
-            dtx: dtx,
-            maptx: maptxs,
-            chunks: chunktxs
-        }
-    } else {
-        // should use B
-        // prepare B UTXO
-        var requires = [{ key: "b", satoshis: BASE_B_SIZE + buffer.length }]
-
-        // OK, split utxo now
-        target_utxos = target_utxos.concat(requires)
-        var { maptxs, utxos } = prepareUtxos(target_utxos, [utxo], privKey)
-
-        var dUtxo = utxos[0]
-        var bUtxo = utxos[1]
-        var tx = bsv.Transaction().from(bUtxo)
-        tx.addOutput(buildBOut({
-            data: buffer,
-            mime: mime,
-            encoding: "binary",
-            filename: md5
-        }))
-        tx.feePerKb(FEE_PER_KB)
-        tx.change(privKey.toAddress())
-        tx.sign(privKey)
-        // Build D TX
-        var dtx = buildDTX(dUtxo, filename, tx.id, privKey)
-        return {
-            btx: tx,
-            dtx: dtx,
-            maptx: maptxs,
-            chunks: []
-        }
-    }
-}
-
 function buildDTX(utxo, key, value, privKey) {
-    if (global.debug) console.log(key)
+    if (global.verbose) console.log(key)
     var tx = bsv.Transaction()
     tx.from(utxo)
     tx.addOutput(buildDOut({
@@ -266,7 +218,6 @@ module.exports = {
     buildBCatOut: buildBCatOut,
     buildBCatPartOut: buildBCatPartOut,
     buildDOut: buildDOut,
-    buildFileTX: buildFileTX,
     buildDTX: buildDTX,
     prepareUtxos: prepareUtxos,
     retrieveUTXO: retrieveUTXO

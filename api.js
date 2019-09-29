@@ -1,3 +1,12 @@
+/*
+    This module handle details and APIs
+    - acquire file/directory data
+    - acquire blockchain data
+    - broadcast to blockchain
+
+    This should cover the difference between Node/Browser.
+    TODO: Browser implements
+*/
 const explorer = require('bitcore-explorers')
 const Insight = explorer.Insight
 const insight = new explorer.Insight('https://api.bitindex.network')
@@ -7,47 +16,10 @@ const BitDB = require('./bitdb.js')
 const MimeLookup = require('mime-lookup');
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
-
-function init(){
-    if(!fs.existsSync("./.bsv")){
-        fs.mkdirSync("./.bsv")
-    }
-    // 初始化objects结构
-    if(!fs.existsSync("./.bsv/objects")){
-        fs.mkdirSync("./.bsv/objects")
-    }
-    // 初始化D镜像目录
-    if(!fs.existsSync("./.bsv/tx")){
-        fs.mkdirSync("./.bsv/tx")
-    }
-    // 初始化D树文件
-    if(!fs.existsSync("./.bsv/info")){
-        fs.mkdirSync("./.bsv/info")
-    }
-}
-
-function loadKey(password){
-    var buf = fs.readFileSync("./.bsv/key").toString()
-    var decBuf = decrypt(buf, password)
-    return bsv.PrivateKey(decBuf.toString())
-}
-function saveKey(privkey, password){
-    var buf = Buffer.from(privkey.toString())
-    var encBuf = encrypt(buf, password)
-    fs.writeFileSync("./.bsv/key", encBuf)
-}
-
-function encrypt(plaintext, password){
-    var cipher = crypto.createCipher('aes-128-ecb',password)
-    return cipher.update(plaintext,'utf8','hex') + cipher.final('hex')
-}
-function decrypt(ciphertext, password){
-    var cipher = crypto.createDecipher('aes-128-ecb',password)
-    return cipher.update(ciphertext,'hex','utf8') + cipher.final('utf8')
-}
+const Cache = require("./cache.js")
 
 async function transfer(address, key){
-    var utxos = await api.getUTXOs(key.toAddress().toString())
+    var utxos = await getUTXOs(key.toAddress().toString())
     // 开始构造转账TX
     var tx = bsv.Transaction()
     utxos.forEach(utxo=>tx.from(utxo))
@@ -55,7 +27,7 @@ async function transfer(address, key){
     tx.feePerKb(1536)
     tx.sign(key)
     console.log(`转账TXID Transfer TXID: ${tx.id}`)
-    await broadcast(tx.toString(), true)
+    await broadcast_insight(tx.toString(), true)
 }
 
 async function getUTXOs(address){
@@ -71,7 +43,7 @@ async function getUTXOs(address){
     })
 }
 
-async function broadcast(tx){
+async function broadcast_insight(tx){
     return new Promise((resolve, reject)=>{
         insight.broadcast(tx.toString(),(err,res)=>{
             if(err){
@@ -87,17 +59,43 @@ async function broadcast(tx){
     
 }
 
+async function broadcast(tx, unBroadcast){
+    try {
+      const res = await broadcast_insight(tx)
+      Cache.saveTX(tx)
+      console.log(`Broadcasted ${res}`)
+      return res
+    } catch(e) {
+      if(unBroadcast && Array.isArray(unBroadcast))unBroadcast.push(tx)
+      throw e
+    }
+}
+
+async function tryBroadcastAll(TXs){
+    var toBroadcast = TXs? TXs : Cache.loadUnbroadcast()
+    var unBroadcast = []
+    for (let tx of toBroadcast) {
+      try {
+        await broadcast(tx, unBroadcast)
+      } catch([txid,err]) {
+        console.log(`${txid} 广播失败，原因 fail to broadcast:`)
+        console.log(err.split("\n")[0])
+        console.log(err.split("\n")[2])
+      }
+    }
+    return Cache.saveUnbroadcast(unBroadcast)
+}
+
 async function findExist(buf, mime) {
     var sha1 = crypto.createHash('sha1').update(buf).digest('hex')
-    if (global.debug) console.log(sha1)
+    if (global.verbose) console.log(sha1)
     if (global.quick) return null
-    var records = []
-    if (fs.existsSync(`./.bsv/objects/${sha1}`)) records = JSON.parse(fs.readFileSync(`./.bsv/objects/${sha1}`))
+    var records = Cache.loadFileRecord(sha1)
     if (!Array.isArray(records) || records.length == 0) {
-        console.log(" - 向BitDB搜索已存在的文件记录 Querying BitDB")
+        if (global.verbose) console.log(" - 向BitDB搜索已存在的文件记录 Querying BitDB")
         records = await BitDB.findExist(buf)
         records = records.filter(record => record.contenttype == mime)
-        fs.writeFileSync(`./.bsv/objects/${sha1}`, JSON.stringify(records))
+        Cache.saveFileRecord(sha1, records)
     }
     if (records.length == 0) return null
     var txs = await Promise.all(records.map(record => getTX(record.txid)))
@@ -112,6 +110,10 @@ async function findExist(buf, mime) {
     else return null
 }
 
+/*
+    BitDB queries are expensive at time
+    We should do a all in one query
+*/
 var dRecords = null
 async function findD(key, address, value) {
     if (global.quick) return null
@@ -129,19 +131,19 @@ async function findD(key, address, value) {
 
 async function getTX(txid) {
     return new Promise((resolve, reject) => {
-        if (fs.existsSync(`./.bsv/tx/${txid}`)) {
-            var rawtx = fs.readFileSync(`./.bsv/tx/${txid}`).toString()
-            resolve(bsv.Transaction(rawtx))
+        var tx = Cache.loadTX(txid)
+        if (tx) {
+            resolve(tx)
         } else {
             insight.requestGet(`/api/tx/${txid}`, (err, res, body) => {
                 if (err || res.statusCode !== 200) reject(err || body)
                 //console.log(body)
                 try {
-                    var rawtx = JSON.parse(body).rawtx
-                    fs.writeFileSync(`./.bsv/tx/${txid}`, rawtx)
-                    resolve(bsv.Transaction(rawtx))
+                    tx = bsv.Transaction(JSON.parse(body).rawtx)
+                    Cache.saveTX(tx)
+                    resolve(tx)
                 } catch (err) {
-                    console.log("获取TX时发生错误 Error acquring TX")
+                    console.log(`获取TX时发生错误 Error acquring TX ${txid}`)
                     console.log(body)
                     reject(err)
                 }
@@ -159,24 +161,68 @@ async function getData(tx) {
     else {
         // 处理Bcat
         var bParts = bufs.slice(7).map(buf => buf.toString('hex'))
-        if (global.debug) console.log("处理Bcat中。。。" + bParts)
+        if (global.verbose) console.log("处理Bcat中。。。" + bParts)
         var bPartTXs = await Promise.all(bParts.map(bPart => getTX(bPart)))
-        if (global.debug) console.log(bPartTXs.map(tx => tx.id))
+        if (global.verbose) console.log(bPartTXs.map(tx => tx.id))
         var bPartBufs = bPartTXs.map(tx => tx.outputs.filter(out => out.script.isDataOut())[0].script.chunks[2].buf)
-        if (global.debug) console.log(bPartBufs.map(buf => buf.length))
+        if (global.verbose) console.log(bPartBufs.map(buf => buf.length))
         var buf = Buffer.concat(bPartBufs)
-        if (global.debug) console.log(buf.length)
+        if (global.verbose) console.log(buf.length)
         return buf
     }
 }
 
+
+function readFile(file, dirHandle) {
+    if (fs.statSync(file).isDirectory()) {
+        if (global.verbose) console.log("处理目录 Handling folder")
+        switch (dirHandle) {
+            case "html":
+                return {
+                    buf: Buffer.from('<head><meta http-equiv="refresh" content="0;url=index.html"></head>'),
+                    mime: "text/html"
+                }
+            case "dir":
+                // 创建目录浏览
+                var files = fs.readdirSync(file).map(item => (fs.statSync(file + "/" + item).isDirectory()) ? item + "/" : item)
+                return {
+                    buf: Buffer.from(`<head></head><body><script language="javascript" type="text/javascript">var files = ${JSON.stringify(files)};document.write("<p><a href='../'>..</a></p>");files.forEach(file=>document.write("<p><a href='" + file + "'>" + file + "</a></p>"));</script></body>`),
+                    mime: "text/html"
+                }
+            default:
+                return {}
+        }
+    } else {
+        var buf = fs.readFileSync(file)
+        var mime = MIME.lookup(file)
+        return {
+            buf: buf,
+            mime: mime
+        }
+    }
+}
+
+function readFiles(path) {
+    path = path || "."
+    return fs.readdirSync(path).map(item => {
+        if (item == ".bsv") return []
+        var itemPath = path + "/" + item
+        return (fs.statSync(itemPath).isDirectory()) ? readFiles(itemPath).concat([itemPath + "/"]) : [itemPath]
+    }).reduce((res, item) => res.concat(item), [])
+}
+
+function isDirectory(path){
+    return fs.statSync(path).isDirectory()
+}
+
 module.exports = {
-    init: init,
-    loadKey: loadKey,
-    saveKey: saveKey,
     transfer: transfer,
     findD: findD,
     findExist: findExist,
+    tryBroadcastAll: tryBroadcastAll,
     broadcast: broadcast,
-    getUTXOs: getUTXOs
+    getUTXOs: getUTXOs,
+    readFile: readFile,
+    readFiles: readFiles,
+    isDirectory: isDirectory
 }
