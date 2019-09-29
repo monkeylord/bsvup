@@ -8,10 +8,60 @@ const MimeLookup = require('mime-lookup');
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
 
-async function getUTXOs(address) {
-    return new Promise((resolve, reject) => {
-        insight.getUnspentUtxos(address, (err, unspents) => {
-            if (err) {
+function init(){
+    if(!fs.existsSync("./.bsv")){
+        fs.mkdirSync("./.bsv")
+    }
+    // 初始化objects结构
+    if(!fs.existsSync("./.bsv/objects")){
+        fs.mkdirSync("./.bsv/objects")
+    }
+    // 初始化D镜像目录
+    if(!fs.existsSync("./.bsv/tx")){
+        fs.mkdirSync("./.bsv/tx")
+    }
+    // 初始化D树文件
+    if(!fs.existsSync("./.bsv/info")){
+        fs.mkdirSync("./.bsv/info")
+    }
+}
+
+function loadKey(password){
+    var buf = fs.readFileSync("./.bsv/key").toString()
+    var decBuf = decrypt(buf, password)
+    return bsv.PrivateKey(decBuf.toString())
+}
+function saveKey(privkey, password){
+    var buf = Buffer.from(privkey.toString())
+    var encBuf = encrypt(buf, password)
+    fs.writeFileSync("./.bsv/key", encBuf)
+}
+
+function encrypt(plaintext, password){
+    var cipher = crypto.createCipher('aes-128-ecb',password)
+    return cipher.update(plaintext,'utf8','hex') + cipher.final('hex')
+}
+function decrypt(ciphertext, password){
+    var cipher = crypto.createDecipher('aes-128-ecb',password)
+    return cipher.update(ciphertext,'hex','utf8') + cipher.final('utf8')
+}
+
+async function transfer(address, key){
+    var utxos = await api.getUTXOs(key.toAddress().toString())
+    // 开始构造转账TX
+    var tx = bsv.Transaction()
+    utxos.forEach(utxo=>tx.from(utxo))
+    tx.change(address)
+    tx.feePerKb(1536)
+    tx.sign(key)
+    console.log(`转账TXID Transfer TXID: ${tx.id}`)
+    await broadcast(tx.toString(), true)
+}
+
+async function getUTXOs(address){
+    return new Promise((resolve, reject)=>{
+        insight.getUnspentUtxos(address,(err,unspents)=>{
+            if(err){
                 reject("Insight API return Errors: " + err)
             } else {
                 utxos = unspents
@@ -21,16 +71,20 @@ async function getUTXOs(address) {
     })
 }
 
-async function broadcast(tx) {
-    return new Promise((resolve, reject) => {
-        insight.broadcast(tx.toString(), (err, res) => {
-            if (err) {
+async function broadcast(tx){
+    return new Promise((resolve, reject)=>{
+        insight.broadcast(tx.toString(),(err,res)=>{
+            if(err){
+                if(err.message && err.message.message)err=err.message.message
                 console.log(" Insight API return Errors: ")
                 console.log(err)
-                reject("Insight API return Errors: " + err)
-            } else resolve(res)
+                reject([tx.id,"Insight API return Errors: " + err])
+            }else{
+                resolve(res)
+            }
         })
     })
+    
 }
 
 async function findExist(buf, mime) {
@@ -117,6 +171,10 @@ async function getData(tx) {
 }
 
 module.exports = {
+    init: init,
+    loadKey: loadKey,
+    saveKey: saveKey,
+    transfer: transfer,
     findD: findD,
     findExist: findExist,
     broadcast: broadcast,
