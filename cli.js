@@ -122,7 +122,7 @@ async function broadcast(){
     let remaining = await api.tryBroadcastAll()
     if(remaining.length>0){
         console.log(`${remaining}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
-        console.log(`Not All Transaction Broadcasted, ${remaining} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
+        console.log(`Not All Transaction Broadcasted, ${remaining.length} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
         setTimeout(broadcast,120000)
     }else{
         console.log("所有TX已广播！")
