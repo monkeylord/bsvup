@@ -15,7 +15,59 @@ const DUST_LIMIT = 546
 const MAX_OUTPUT = 1000
 const SIZE_PER_OUTPUT = 100
 
-async function upload(path, privkey, dirHandle, subdir) {
+var unBroadcast = []
+function loadUnbroadcast(){
+    unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx=>bsv.Transaction(tx))
+    return unBroadcast.length
+}
+
+async function broadcast(tx){
+  try {
+    const res = await API.broadcast(tx)
+    fs.writeFileSync(`./.bsv/tx/${res}`, tx.toString())
+    console.log(`Broadcasted ${res}`)
+    return res
+  } catch(e) {
+    unBroadcast.push(tx)
+    throw e
+  }
+}
+
+async function tryBroadcastAll(){
+    var toBroadcast = unBroadcast
+    unBroadcast = []
+    for (let tx of toBroadcast) {
+      try {
+        await broadcast(tx)
+      } catch([txid,err]) {
+        console.log(`${txid} 广播失败，原因 fail to broadcast:`)
+        console.log(err.split("\n")[0])
+        console.log(err.split("\n")[2])
+      }
+    }
+    if(unBroadcast.length>0){
+        fs.writeFileSync("./.bsv/unbroadcasted.tx.json", JSON.stringify(unBroadcast))
+    }else{
+        if(fs.existsSync("./.bsv/unbroadcasted.tx.json"))fs.unlinkSync("./.bsv/unbroadcasted.tx.json")
+    }
+    return unBroadcast.length
+}
+
+async function prepareUpload(path, key, type, subdir){
+    var tasks = await upload(path, key, type, subdir)
+
+    // 准备上传
+    unBroadcast = tasks.map(task=>task.tx)
+    tasks.every(task=>{
+        if(global.debug)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
+        return txutil.verifyTX(task.tx)
+    })
+    fs.writeFileSync("./.bsv/unbroadcasted.tx.json",JSON.stringify(unBroadcast))
+
+    return tasks
+}
+
+async function upload(path, privkey, dirHandle, subdir){
     // 准备上传任务
     var tasks = []
     if (fs.statSync(path).isDirectory()) {
@@ -198,8 +250,8 @@ async function fundTasks(tasks, privkey) {
     var satoshisRequired = tasks.reduce((totalRequired, task)=>totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
     var satoshisProvided = utxos.reduce((totalProvided, utxo)=>totalProvided += (utxo.amount)? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
     if (satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT < 0) {
-        console.log(`当前地址余额不足以完成上传操作，差额大约为 ${satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT} satoshis`)
-        console.log(`Insuffient satoshis, still need ${satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT} satoshis`)
+        console.log(`当前地址余额不足以完成上传操作，差额大约为 ${satoshisRequired + tasks.length * SIZE_PER_OUTPUT - satoshisProvided} satoshis`)
+        console.log(`Insuffient satoshis, still need ${satoshisRequired + tasks.length * SIZE_PER_OUTPUT - satoshisProvided} satoshis`)
         console.log("请使用 charge 命令获取转账地址 Use charge command to acquire charge address")
         throw new Error("Insuffient satoshis.")
     }
@@ -375,4 +427,7 @@ function readFiles(path) {
     }).reduce((res, item) => res.concat(item), [])
 }
 
+module.exports.loadUnbroadcast = loadUnbroadcast
+module.exports.tryBroadcastAll = tryBroadcastAll
 module.exports.upload = upload
+module.exports.prepareUpload = prepareUpload
