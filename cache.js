@@ -6,14 +6,8 @@
     - PrivateKey cache
     - Unbroadcast TXs
 */
-const explorer = require('bitcore-explorers')
-const Insight = explorer.Insight
-const insight = new explorer.Insight('https://api.bitindex.network')
 const bsv = require('bsv')
 const fs = require('fs')
-const BitDB = require('./bitdb.js')
-const MimeLookup = require('mime-lookup');
-const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
 
 function init(){

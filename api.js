@@ -8,7 +8,6 @@
     TODO: Browser implements
 */
 const explorer = require('bitcore-explorers')
-const Insight = explorer.Insight
 const insight = new explorer.Insight('https://api.bitindex.network')
 const bsv = require('bsv')
 const fs = require('fs')
@@ -18,6 +17,9 @@ const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
 const Cache = require("./cache.js")
 
+/*
+    Handling transfer
+*/
 async function transfer(address, key){
     var utxos = await getUTXOs(key.toAddress().toString())
     // 开始构造转账TX
@@ -30,6 +32,9 @@ async function transfer(address, key){
     await broadcast_insight(tx.toString(), true)
 }
 
+/*
+    Get UTXOs from insight API
+*/
 async function getUTXOs(address){
     return new Promise((resolve, reject)=>{
         insight.getUnspentUtxos(address,(err,unspents)=>{
@@ -43,6 +48,9 @@ async function getUTXOs(address){
     })
 }
 
+/*
+    Broadcast transaction though insight API
+*/
 async function broadcast_insight(tx){
     return new Promise((resolve, reject)=>{
         insight.broadcast(tx.toString(),(err,res)=>{
@@ -59,6 +67,9 @@ async function broadcast_insight(tx){
     
 }
 
+/*
+    Wrapped broadcast transaction, push unbroadcast transaction into unbroadcast array provided.
+*/
 async function broadcast(tx, unBroadcast){
     try {
       const res = await broadcast_insight(tx)
@@ -71,6 +82,10 @@ async function broadcast(tx, unBroadcast){
     }
 }
 
+/*
+    Try broadcast all transactions given.
+    If TXs is null, load transactions from cache.
+*/
 async function tryBroadcastAll(TXs){
     var toBroadcast = TXs? TXs : Cache.loadUnbroadcast()
     var unBroadcast = []
@@ -86,6 +101,10 @@ async function tryBroadcastAll(TXs){
     return Cache.saveUnbroadcast(unBroadcast)
 }
 
+/*
+    Find exist bsvup B/Bcat record on blockchain.
+    We use sha1 as file name.
+*/
 async function findExist(buf, mime) {
     var sha1 = crypto.createHash('sha1').update(buf).digest('hex')
     if (global.verbose) console.log(sha1)
@@ -95,7 +114,6 @@ async function findExist(buf, mime) {
         if (global.verbose) console.log(" - 向BitDB搜索已存在的文件记录 Querying BitDB")
         records = await BitDB.findExist(buf)
         records = records.filter(record => record.contenttype == mime)
-        Cache.saveFileRecord(sha1, records)
     }
     if (records.length == 0) return null
     var txs = await Promise.all(records.map(record => getTX(record.txid)))
@@ -106,8 +124,13 @@ async function findExist(buf, mime) {
             else reject()
         })
     })).catch(err => null)
-    if (matchTX) return matchTX
-    else return null
+    if (matchTX){
+        Cache.saveFileRecord(sha1, records)
+        return matchTX
+    }
+    else {
+        return null
+    }
 }
 
 /*
@@ -119,8 +142,8 @@ async function findD(key, address, value) {
     if (global.quick) return null
     //var dRecords = await BitDB.findD(key, address)
     if (!dRecords) {
-        console.log(`查询${address}下所有D记录中...`)
-        console.log(`Query all D records on ${address} from BitDB...`)
+        if(global.verbose) console.log(`查询${address}下所有D记录中...`)
+        if(global.verbose) console.log(`Query all D records on ${address} from BitDB...`)
         dRecords = await BitDB.findD(null, address)
     }
     var keyDRecords = dRecords.filter(record => record.key == key)
@@ -152,7 +175,9 @@ async function getTX(txid) {
     }).catch(err => null)
 }
 
-
+/*
+    Extract B/Bcat data from transaction(s)
+*/
 async function getData(tx) {
     var dataout = tx.outputs.filter(out => out.script.isDataOut())
     if (dataout.length == 0) throw new Error("Not Data TX")
@@ -172,26 +197,38 @@ async function getData(tx) {
     }
 }
 
+/*
+    Directory handler.
+    
+    TODO: index page
+*/
+function readDir(file, dirHandle){
+    if (!fs.statSync(file).isDirectory()) return {}
+    if (global.verbose) console.log(" - Generating folder file")
+    switch (dirHandle) {
+        case "html":
+            return {
+                buf: Buffer.from('<head><meta http-equiv="refresh" content="0;url=index.html"></head>'),
+                mime: "text/html"
+            }
+        case "dir":
+            // 创建目录浏览
+            var files = fs.readdirSync(file).map(item => (fs.statSync(file + "/" + item).isDirectory()) ? item + "/" : item)
+            return {
+                buf: Buffer.from(`<head></head><body><script language="javascript" type="text/javascript">var files = ${JSON.stringify(files)};document.write("<p><a href='../'>..</a></p>");files.forEach(file=>document.write("<p><a href='" + file + "'>" + file + "</a></p>"));</script></body>`),
+                mime: "text/html"
+            }
+        default:
+            return {}
+    }
+}
 
+/*
+    Read file buffer and mime type
+*/
 function readFile(file, dirHandle) {
     if (fs.statSync(file).isDirectory()) {
-        if (global.verbose) console.log("处理目录 Handling folder")
-        switch (dirHandle) {
-            case "html":
-                return {
-                    buf: Buffer.from('<head><meta http-equiv="refresh" content="0;url=index.html"></head>'),
-                    mime: "text/html"
-                }
-            case "dir":
-                // 创建目录浏览
-                var files = fs.readdirSync(file).map(item => (fs.statSync(file + "/" + item).isDirectory()) ? item + "/" : item)
-                return {
-                    buf: Buffer.from(`<head></head><body><script language="javascript" type="text/javascript">var files = ${JSON.stringify(files)};document.write("<p><a href='../'>..</a></p>");files.forEach(file=>document.write("<p><a href='" + file + "'>" + file + "</a></p>"));</script></body>`),
-                    mime: "text/html"
-                }
-            default:
-                return {}
-        }
+        return readDir(file, dirHandle)
     } else {
         var buf = fs.readFileSync(file)
         var mime = MIME.lookup(file)
@@ -223,6 +260,7 @@ module.exports = {
     broadcast: broadcast,
     getUTXOs: getUTXOs,
     readFile: readFile,
+    readDir: readDir,
     readFiles: readFiles,
     isDirectory: isDirectory
 }

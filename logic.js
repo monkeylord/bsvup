@@ -13,22 +13,19 @@
     - * broadcasted (Transaction is broadcasted)
 
     Uploading precedure:
-    - create B/Bcat/D Task from file data
-    - create Map Task to split approperiate UTXOs to fund previous tasks
-    - pend tasks and handle dependencies
+    - read files to filedata objects (getFileDatum)
+    - check exist B/Bcat/D and reduce filedatum (reduceFileDatum)
+    - create B/Bcat/D Task from filedatum (createUploadTasksEx)
+    - create Map Task to split approperiate UTXOs to fund previous tasks (fundTasks)
+    - pend tasks and handle dependencies (pendTasks)
+    - check if all tasks valid (verifyTasks)
     - * broadcast
 */
 
-const fs = require('fs')
 const bsv = require('bsv')
 const crypto = require("crypto")
 const API = require('./api.js')
 const txutil = require("./txUtil.js")
-const Cache = require("./cache.js")
-
-
-const MimeLookup = require('mime-lookup');
-const MIME = new MimeLookup(require('mime-db'))
 
 const CHUNK_SIZE = 64000
 const BASE_TX = 400
@@ -38,13 +35,20 @@ const MAX_OUTPUT = 1000
 const SIZE_PER_OUTPUT = 100
 
 /*
-    Wrap task lifecircle, create tasks and make tasks ready to broadcast
+    Wrap task lifecircle, read file datum from fs, create tasks and make tasks ready to broadcast
 */
 async function prepareUpload(path, privkey, type, subdir){
+    // read files
+    var fileDatum = await getFileDatum(path, type, subdir)
+    // check existed
+    var fileDatum = await reduceFileDatum(fileDatum, privkey)
     // create tasks
-    var tasks = await createUploadTasks(path, privkey, type, subdir)
+    var tasks = await createUploadTasksEx(fileDatum)
+    //var tasks = await createUploadTasks(path, privkey, type, subdir)
+    if(tasks.length == 0) return tasks
     // fund tasks (Throw insuffient satoshis error if not enough)
-    await fundTasks(tasks, privkey)
+    var UTXOs = await API.getUTXOs(privkey.toAddress().toString())
+    await fundTasks(tasks, privkey, UTXOs)
     // pend tasks (known issue: Customized tasks may dead loop for dependencies cannot be solved)
     pendTasks(tasks)
     // verify tasks (will throw error if failed)
@@ -55,6 +59,147 @@ async function prepareUpload(path, privkey, type, subdir){
 }
 
 /*
+    Read file datum from filesystem.
+
+    Input
+    - path in filesystem
+    - directory handle type
+    - sub directory in D record
+
+    Output
+    - file datum
+*/
+async function getFileDatum(path, dirHandle, subdir){
+    console.log(`[+] Loading files from ${path}`)
+    if(global.verbose) console.log(`    Directory type: ${dirHandle}`)
+    if(global.verbose) console.log(`    Target sub directory: ${subdir}`)
+
+    var fileDatum = []
+    var files = API.isDirectory(path)? API.readFiles(path) : [ path.split("/").reverse()[0] ]
+    var basePath = API.isDirectory(path)? path : path.split("/").reverse().slice(1).reverse().join("/")
+
+    if(global.verbose) console.log(`    Base path: ${basePath}`)
+    if(global.verbose) console.log(`    Total: ${files.length} files`)
+
+    for (file of files) {
+        if(global.verbose) console.log(` - File to read is ${file}`)
+        var { buf, mime } = API.isDirectory(file)? API.readDir(file, dirHandle) : API.readFile(file)
+        if(!mime){
+            if(global.verbose) console.log(` - File data not found, skip`)
+            continue
+        }
+        var relativePath = file.slice(basePath.length)
+        if(global.verbose) console.log(` - Reading ${API.isDirectory(file) ? "directory" : "file"}: ${relativePath}`)
+
+        var filename = (subdir + "/" + relativePath).replace(/\/\/+/g, '/')
+        if (filename.startsWith('/')) filename = filename.slice(1)
+        var dKey = encodeURI(filename)
+        if(global.verbose) console.log(`   D key: ${dKey}`)
+
+        fileDatum.push({
+            buf: buf,
+            mime: mime,
+            dKey: dKey
+        })
+    }
+    return fileDatum
+}
+
+/*
+    Check if file B/D record already on chain.
+    We do not need to waste satoshis.
+
+    Input
+    - file datum
+
+    Ouput
+    - file datum (marked)
+
+    Input example:
+    [{
+        buf: Buffer,
+        mime: "text/html",
+        dKey: "foo/file.txt",
+    }]
+*/
+async function reduceFileDatum(fileDatum, privkey){
+    console.log(`[+] Checking Exist Record`)
+    for (fileData of fileDatum) {
+        console.log(` - Checking ${fileData.dKey}`)
+        var fileTX = await API.findExist(fileData.buf, fileData.mime).catch(err => null)
+        if(fileTX){
+            console.log(`   Data found on chain.`)
+            fileData.bExist = true
+            //fileData.buf = undefined    // Release Buffer
+            fileData.dExist = false
+            fileData.dValue = fileTX.id
+            if(await API.findD(fileData.dKey, privkey.toAddress().toString(), fileTX.id)){
+                fileData.dExist = true
+                console.log(`   D Record found on chain.`)
+            }
+        }else {
+            fileData.bExist = false
+            fileData.dExist = false
+        }
+    }
+    return fileDatum
+}
+
+/*
+    Create file/directory upload tasks from file datum.
+
+    Input
+    - File datum
+    Output
+    - Tasks
+
+    TODO:
+    - other encoding (I think binary is OK for everything, but someone may want gzip)
+
+    PS: You can use this directly.
+
+    filedatum example:
+    [
+        {
+            buf: Buffer,
+            mime: "text/html",
+            dKey: "foo/file.txt",
+            bExist: false,
+            dExist: false,
+        },
+        {
+            dKey: "foo/file.txt",
+            dValue: TXID,
+            bExist: true,
+            dExist: false,
+        }
+    ]
+*/
+async function createUploadTasksEx(filedatum){
+    console.log(`[+] Creating Tasks`)
+    var tasks = []
+    filedatum.forEach(filedata=>{
+        if(!filedata.bExist){
+            if(global.verbose) console.log(` - Create B/D tasks for ${filedata.dKey}`)
+            var bTasks = upload_FileTask(filedata.buf, filedata.mime)
+            var dTask = upload_dTask(filedata.dKey, bTasks)
+            tasks.push(dTask)
+            bTasks.forEach(bTask => tasks.push(bTask))
+        }else if(!filedata.dExist){
+            if(global.verbose) console.log(` - Create D tasks for ${filedata.dKey}`)
+            var dTask = update_dTask(filedata.dKey, filedata.dValue)
+            tasks.push(dTask)
+        }else {
+            if(global.verbose) console.log(` - Ignore ${filedata.dKey}`)
+            // Both B and D Exist, no task needed.
+        }
+    })
+    if(tasks.length ==0)console.log("No task created.")
+    return tasks
+}
+
+/*
+    Depleted !
     Create file/directory upload tasks
     Read all files from API first.
     Check if file data already onchain.
@@ -65,10 +210,6 @@ async function prepareUpload(path, privkey, type, subdir){
     - PrivateKey
     Output
     - Tasks
-
-    TODO:
-    - read from prepared filedata (may not from fs), a filedata item may be filename, buffer, targetname, mime
-    - other encoding (I think binary is OK for everything, but someone may want gzip)
 */
 async function createUploadTasks(path, privkey, dirHandle, subdir){
     // 准备上传任务
@@ -291,9 +432,10 @@ function update_dTask(key, value) {
     Output
     - Funded tasks with map tasks added
 */
-async function fundTasks(tasks, privkey) {
+async function fundTasks(tasks, privkey, utxos) {
     // 给任务添加的UTXO格式中应包含privkey
-    var utxos = await API.getUTXOs(privkey.toAddress().toString())
+    console.log(`[+] Funding Tasks`)
+    //var utxos = await API.getUTXOs(privkey.toAddress().toString())
     // 现在检查是否有足够的Satoshis
     var satoshisRequired = tasks.reduce((totalRequired, task)=>totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
     var satoshisProvided = utxos.reduce((totalProvided, utxo)=>totalProvided += (utxo.amount)? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
@@ -387,6 +529,7 @@ async function fundTasks(tasks, privkey) {
 
 */
 function pendTasks(tasks, privkey) {
+    console.log(`[+] Pending Tasks`)
     // 假设：不存在依赖死锁或循环问题。所以可以通过有限次循环完成所有TX的生成
     while (!tasks.every(task => task.status == "pended")) {
         // 寻找可以直接生成的TX
@@ -463,8 +606,9 @@ function pendTasks(tasks, privkey) {
     - True if all tasks valid
 */
 function verifyTasks(tasks){
+    console.log(`[+] Verifying Tasks`)
     return tasks.every(task=>{
-        if(global.verbose)console.log(`Verifying ${task.type} TX ${task.tx.id}`)
+        if(global.verbose)console.log(` - Verifying ${task.type} TX ${task.tx.id}`)
         return txutil.verifyTX(task.tx)
     })
 }
@@ -483,7 +627,8 @@ function getTXs(tasks){
 }
 
 module.exports = {
-    createUploadTasks : createUploadTasks,
+    createUploadTasks : createUploadTasksEx,
+    reduceFileDatum: reduceFileDatum,
     fundTasks : fundTasks,
     pendTasks: pendTasks,
     verifyTasks: verifyTasks,
