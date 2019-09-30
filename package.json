@@ -1,11 +1,12 @@
 {
   "name": "bsvup",
-  "version": "1.4.0",
+  "version": "1.4.1",
   "description": "Put file/directory on BSV, using D protocol.",
   "main": "index.js",
   "bin": {
     "bsvup": "./cli.js"
   },
+  "unpkg": "bsvup.min.js",
   "dependencies": {
     "bitcoin-ibe": "^1.2.2",
     "bitcore-explorers": "^1.0.1",
@@ -20,7 +21,12 @@
   },
   "devDependencies": {},
   "scripts": {
-    "test": "mocha"
+    "test": "mocha",
+    "build": "webpack index.js --output-library bsvup -o bsvup.min.js"
+  },
+  "browser":{
+    "./api.js": "./api.browser.js",
+    "./cache.js": "./cache.browser.js"
   },
   "repository": {
     "type": "git",

@@ -1,10 +1,10 @@
-const crypto = require("crypto")
+const bsv = require("bsv")
 const bitdb = 'https://genesis.bitdb.network/q/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxtN/'
 const BitDBKey = ['159bcdKY4spcahzfTZhBbFBXrTWpoh4rd3']
 const fetch = require('node-fetch')
 
 function findExist(buffer) {
-    var sha1 = crypto.createHash('sha1').update(buffer).digest('hex')
+    var sha1 = bsv.crypto.Hash.sha1(buffer).toString('hex')
     var query = queryHash(sha1)
     // TODO: 向BitDB查询相关TX(s)并校验
     var b64 = Buffer.from(JSON.stringify(query)).toString('base64');

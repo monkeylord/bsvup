@@ -23,7 +23,6 @@
 */
 
 const bsv = require('bsv')
-const crypto = require("crypto")
 const API = require('./api.js')
 const txutil = require("./txUtil.js")
 
@@ -310,7 +309,7 @@ function upload_FileTask(fileBuf, mime) {
     var fileBuf = fs.readFileSync(filename)
     var mime = MIME.lookup(filename)
     */
-    var sha1 = crypto.createHash('sha1').update(fileBuf).digest('hex')
+    var sha1 = bsv.crypto.Hash.sha1(fileBuf).toString('hex')
 
     var tasks = []
     if (fileBuf.length <= CHUNK_SIZE) {
@@ -356,7 +355,7 @@ function upload_FileTask(fileBuf, mime) {
                 mime: mime,
                 encoding: "binary",
                 filename: sha1,
-                flag: Buffer.from("00", "hex"),
+                flag: bsv.deps.Buffer.from("00", "hex"),
                 chunks: null
             },
             deps: partTasks,

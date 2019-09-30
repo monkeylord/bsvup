@@ -8,11 +8,6 @@
         - D
 */
 const bsv = require('bsv')
-const ibe = require('bitcoin-ibe')
-const MimeLookup = require('mime-lookup');
-const MIME = new MimeLookup(require('mime-db'))
-const fs = require("fs")
-const crypto = require("crypto")
 
 const CHUNK_SIZE = 64000
 const FEE_PER_KB = 1536
