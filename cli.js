@@ -223,13 +223,18 @@ async function transfer() {
 }
 
 async function loadKey(){
-    var answers = await inquirer.prompt([ { 
-        type: 'password', 
-        name: 'password', 
-        default: "",
-        message: "请输入密码以解锁私钥 Password to unlock private key:", 
-    }])
-    var password = answers.password
+    var password
+    if (program.password) {
+        password = program.password
+    } else {
+        var answers = await inquirer.prompt([ { 
+            type: 'password', 
+            name: 'password', 
+            default: "",
+            message: "请输入密码以解锁私钥 Password to unlock private key:", 
+        }])
+        password = answers.password
+    }
     return Cache.loadKey(password)
 }
 async function saveKey(privkey){
