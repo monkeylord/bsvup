@@ -175,6 +175,11 @@ async function upload(){
     }
     if (toBroadcast) {
         Cache.saveUnbroadcast(unBroadcast)
+        var timenow = new Date().getTime()
+        fs.writeFileSync(`bsvup.${timenow}.tasks`, JSON.stringify(tasks))
+        console.log(`Tasks is saved at bsvup.${timenow}.tasks`)
+        fs.writeFileSync(`bsvup.${timenow}.txs`, JSON.stringify(unBroadcast.map(tx=>tx.toString())))
+        console.log(`TX(s) for the tasks is saved at bsvup.${timenow}.txs`)
         console.log("开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...")
         broadcast()
     }
