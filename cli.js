@@ -243,12 +243,17 @@ async function loadKey(){
     return Cache.loadKey(password)
 }
 async function saveKey(privkey){
-    var answers = await inquirer.prompt([ { 
-        type: 'password', 
-        name: 'password', 
-        default: "",
-        message: "请设置密码以加密私钥 Set key unlock password:", 
-    }])
-    var password = answers.password
+    var password
+    if (program.password) {
+        password = program.password
+    } else {
+        var answers = await inquirer.prompt([ { 
+            type: 'password', 
+            name: 'password', 
+            default: "",
+            message: "请设置密码以加密私钥 Set key unlock password:", 
+        }])
+        password = answers.password
+    }
     Cache.saveKey(privkey, password)
 }
