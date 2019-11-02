@@ -90,7 +90,7 @@ if (process.argv.filter(arg => (arg == "-n" || arg == "--newtask")).length == 0 
 }
 
 async function init(){
-    Cache.init()
+    Cache.initCache()
 
     // 记录私钥，并产生地址
     if (Cache.isKeyExist()) {
@@ -243,12 +243,17 @@ async function loadKey(){
     return Cache.loadKey(password)
 }
 async function saveKey(privkey){
-    var answers = await inquirer.prompt([ { 
-        type: 'password', 
-        name: 'password', 
-        default: "",
-        message: "请设置密码以加密私钥 Set key unlock password:", 
-    }])
-    var password = answers.password
+    var password
+    if (program.password) {
+        password = program.password
+    } else {
+        var answers = await inquirer.prompt([ { 
+            type: 'password', 
+            name: 'password', 
+            default: "",
+            message: "请设置密码以加密私钥 Set key unlock password:", 
+        }])
+        password = answers.password
+    }
     Cache.saveKey(privkey, password)
 }
