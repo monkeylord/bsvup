@@ -1,104 +1,72 @@
-## 文件同步上链工具
+## BSVUP
 
-### 背景
+A file upload tool.
 
-链上文件系统已经提出多时。
+### Background
 
-基于BitDB、B系列协议、D协议，可以实现一套文件系统。
+It's a long time since first file uploaded to bitcoin.
 
-本工具目的即是这样的实现。
+What's more, with D/B/Bcat protocol, we can define an onchain file system.
 
-### 安装与使用
+This tool is an implement of D/B/Bcat protocol, so that you can upload files/directory to blockchain as filesystem.
 
-#### 安装
+### Installation and Usage
+
+#### Command line
+
+##### Install
+
+Once installed, you can use `bsvup` in  command line.
 
 ~~~bash
 npm install -g bsvup
 ~~~
 
-#### 初始化
+##### Initialize
 
-首先进入目标目录
+Switch your working directory to the directory you want to upload, and do the initialization.
+
+This will create a `.bsv` folder, initialize caches and generate key.
 
 ~~~bash
 bsvup init
 ~~~
 
-#### 提供上链花费
+##### Provide satoshis as fees
+
+We  cannot upload things to blockchain without spending some fees, so you should charge some satoshis to the key generated above.
 
 ~~~bash
 bsvup charge
 ~~~
 
-#### 上链
+##### Upload current working directory
+
+The tool can upload any folder or file to blockchain. By default, it upload the current working folder.
+
+ Bsvup will search and cache exist onchain files to minimize uploading.
 
 ~~~bash
 bsvup upload
 ~~~
 
-#### 转出余额
+##### Transfer the remaining fees out
+
+It's unnecessary, but you can do that if you want to get remaining satoshis out.
 
 ~~~bash
 bsvup transfer
 ~~~
 
-### 流程图
+#### Browser
 
-上传流程如下
 
-~~~mermaid
-graph TB
-init[Init]
-load[Load Key]
-checkExistFile[Check Exist Files]
-createFileTask[Create file tasks]
-checkExistMap[Check Exist Map]
-createMapTask[Create map tasks]
-utxos[Split utxos to fund tasks]
-handleFileTask
-updateMapTask
-handleMapTask
-broadcastTX
-wait[Wait for enough satoshis]
-recharge[Recharge QR code]
 
-init-->load
-init-->checkExistFile
-init-->checkExistMap
-checkExistFile-->createFileTask
-checkExistMap-->createMapTask
-load-->utxos
-utxos-->wait
-wait-->recharge
-recharge-->wait
-createFileTask-->utxos
-createMapTask-->utxos
-wait-->handleFileTask
-handleFileTask-->updateMapTask
-updateMapTask-->handleMapTask
-handleMapTask-->broadcastTX
+### Tasks
 
-~~~
+There are dependency between TXs, you need to know TXID before building D/Bcat TXs, but you still need to know how big exactly TX size is, so that you can split utxos for each TX.
 
-下载流程如下
-
-~~~mermaid
-graph TB
-start
-getAddr[Get folder address]
-getMap[Get map files, or all D]
-getFiles[Get all files]
-
-start-->getAddr
-getAddr-->getMap
-getMap-->getFiles
-~~~
-
-### 任务
-
-TX的构建被作为任务
-
-任务和任务之间具有关联：首先，他们需要的UTXO往往需要裂解自相同的最初一批UTXO。其次，他们之间是有先后的依赖顺序的。
+Task is what bsvup use to descript TX.
 
 
 

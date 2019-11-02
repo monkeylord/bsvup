@@ -19,12 +19,14 @@
     "node-fetch": "^2.6.0",
     "qrcode-terminal": "^0.12.0"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "webpack-cli": "^3.3.9"
+  },
   "scripts": {
     "test": "mocha",
-    "build": "webpack index.js --output-library bsvup -o bsvup.min.js"
+    "build": "webpack index.js --config webpack.config.js"
   },
-  "browser":{
+  "browser": {
     "./api.js": "./api.browser.js",
     "./cache.js": "./cache.browser.js"
   },
