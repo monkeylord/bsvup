@@ -37,7 +37,7 @@ async function transfer(address, key){
 */
 async function getUTXOs(address){
     return new Promise((resolve, reject)=>{
-        insight.getUnspentUtxos(address,(err,unspents)=>{
+        insight.getUtxos(address,(err,unspents)=>{
             if(err){
                 reject("Insight API return Errors: " + err)
             } else {
@@ -53,16 +53,25 @@ async function getUTXOs(address){
 */
 async function broadcast_insight(tx){
     return new Promise((resolve, reject)=>{
-        insight.broadcast(tx.toString(),(err,res)=>{
+        insight.broadcast(tx.toString(),(err,res)=>handleBroadcast(err,res))
+        async function handleBroadcast(err,res){
             if(err){
                 if(err.message && err.message.message)err=err.message.message
                 console.log(" Insight API return Errors: ")
                 console.log(err)
-                reject([tx.id,"Insight API return Errors: " + err])
+                let txexists = await new Promise(resolve=>{
+                    insight.getTransaction(tx.id,(err,res)=>resolve(!err && res))
+                })
+                if (txexists) {
+                    console.log(" However, transaction is actually present.")
+                    resolve(txexists.txid)
+                } else {
+                    reject([tx.id,"Insight API return Errors: " + err])
+                }
             }else{
                 resolve(res)
             }
-        })
+        }
     })
     
 }
