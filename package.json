@@ -1,6 +1,6 @@
 {
   "name": "bsvup",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Put file/directory on BSV, using D protocol.",
   "main": "index.js",
   "bin": {
@@ -9,7 +9,7 @@
   "unpkg": "bsvup.min.js",
   "dependencies": {
     "bitcoin-ibe": "^1.2.2",
-    "bitcore-explorers": "^1.0.1",
+    "bitcore-explorers": "bitpay/bitcore-explorers#1f1334f7ea7f75ed80f62d379613a961a66403f2",
     "bsv": "^0.27.2",
     "commander": "^2.20.0",
     "inquirer": "^6.5.0",
