@@ -66,7 +66,7 @@ async function broadcast_insight(tx){
         .catch(err=>{
             console.log(" Insight API return Errors: ")
             console.log(err)
-            reject([tx.id,"Insight API return Errors: " + MediaStreamError])
+            reject([tx.id,"Insight API return Errors: " + err])
         })
     })
     
@@ -78,7 +78,7 @@ async function broadcast_insight(tx){
 async function broadcast(tx, unBroadcast){
     try {
       const res = await broadcast_insight(tx)
-      console.log(`Broadcasted ${res}`)
+      console.log(`Broadcasted ${res.txid}`)
       return res
     } catch(e) {
       if(unBroadcast && Array.isArray(unBroadcast))unBroadcast.push(tx)

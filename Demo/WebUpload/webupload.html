@@ -1,0 +1,128 @@
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>BSVUP</title>
+    <script src="https://unpkg.com/bsv/bsv.min.js"></script>
+    <script src="https://unpkg.com/bsvup@1.4.5/bsvup.min.js"></script>
+</head>
+
+<body>
+    Private Key:<input type="text" id="privkey">
+
+    <p>
+        Select File(s):
+        <input type="file" name="uploadfile" id="uploadfile" multiple="multiple" />
+    </p>
+    <p>
+        Sub Path:<input type="text" id="subpath">
+    </p>
+    <p>
+        Action:
+        <input type="button" id="createTasks" value="createTasks" onclick="createTasks()">
+        <input type="button" id="fundTasks" value="fundTasks" onclick="fundTasks()" disabled=true>
+        <input type="button" id="pendTasks" value="pendTasks" onclick="pendTasks()" disabled=true>
+        <input type="button" id="broadcast" value="broadcast" onclick="broadcast()" disabled=true>
+    </p>
+    <div id="log"></div>
+    <script>
+        //console.log hook
+        (function logHook() {
+            var log = document.getElementById("log")
+            var original_log = console.log
+            console.log = function (...args) {
+                original_log(...args)
+                log.innerText += args + "\r\n"
+                //document.write(args)
+            }
+        })()
+
+        function getKey() {
+            var privkey
+            if (bsv.PrivateKey.isValid(document.getElementById("privkey").value)) {
+                privkey = bsv.PrivateKey(document.getElementById("privkey").value)
+            } else if (bsv.PrivateKey.isValid(localStorage.bsvup_privkey)) {
+                privkey = bsv.PrivateKey(localStorage.bsvup_privkey)
+                console.log(`Your Stored Private Key is ${privkey.toString()}\r\nAddress:${privkey.toAddress()}`)
+            } else {
+                privkey = bsv.PrivateKey()
+                console.log(`Your Generated Private Key is ${privkey.toString()}\r\nAddress:${privkey.toAddress()}`)
+                localStorage.bsvup_privkey = privkey.toString()
+            }
+            return privkey
+        }
+
+        var tasks = []
+        //var privkey = null
+        async function createTasks() {
+            var list = document.getElementById("uploadfile").files
+            var subpath = document.getElementById("subpath").value
+            subpath = (subpath) ? subpath + "/" : ""
+            var privkey = getKey()
+            var files = []
+            for (i = 0; i < list.length; i++) {
+                files.push(list[i])
+            }
+            var datum = await Promise.all(files.map(async file => {
+                return {
+                    dKey: subpath + file.name,
+                    mime: file.type,
+                    buf: bsv.deps.Buffer(await file.arrayBuffer())
+                }
+            }))
+            var reducedDatum = await bsvup.logic.reduceFileDatum(datum, privkey)
+            tasks = await bsvup.logic.createUploadTasks(reducedDatum)
+            console.log("Done!")
+            document.getElementById("fundTasks").disabled = false
+            return tasks
+        }
+
+        async function fundTasks() {
+            var privkey = getKey()
+            try {
+                var utxos = await bsvup.api.getUTXOs(privkey.toAddress())
+                tasks = await bsvup.logic.fundTasks(tasks, privkey, utxos)
+                console.log("Done!")
+            } catch (err) {
+                console.log(err)
+                console.log("Failed")
+            }
+            document.getElementById("pendTasks").disabled = false
+            return tasks
+        }
+
+        async function pendTasks() {
+            try {
+                tasks = await bsvup.logic.pendTasks(tasks)
+                tasks.filter(task => task.type == "D").forEach(task => {
+                    console.log(`[File Record] Path: https://bico.media/${task.utxo.privkey.toAddress()}/${task.out.key} , TXID: ${task.out.value}`)
+                })
+                console.log("Done!")
+            } catch (err) {
+                console.log(err)
+                console.log("Failed")
+            }
+            document.getElementById("broadcast").disabled = false
+            return tasks
+        }
+
+        async function broadcast() {
+            await bsvup.logic.verifyTasks(tasks)
+            var txs = bsvup.logic.getTXs(tasks)
+            var unbroadcasted = txs
+            while(unbroadcasted.length>0){
+                unbroadcasted = await bsvup.api.tryBroadcastAll(txs)
+                if(unbroadcasted>0){
+                    console.log("Wait 120s and retry")
+                    await new Promise((res,rej)=>{
+                        setTimeout(res,120000)
+                    })
+                }
+            }
+            console.log("All Done!")
+        }
+    </script>
+
+    <body>
+
+</html>
