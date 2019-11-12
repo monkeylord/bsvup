@@ -37,6 +37,8 @@
             }
         })()
 
+        bsvup.api.setLogLevel(bsvup.api.logLevel.INFO)
+
         function getKey() {
             var privkey
             if (bsv.PrivateKey.isValid(document.getElementById("privkey").value)) {

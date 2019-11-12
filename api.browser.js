@@ -13,7 +13,7 @@ async function transfer(address, key){
     tx.change(address)
     tx.feePerKb(1536)
     tx.sign(key)
-    console.log(`转账TXID Transfer TXID: ${tx.id}`)
+    log(`转账TXID Transfer TXID: ${tx.id}`, logLevel.INFO)
     await broadcast_insight(tx.toString(), true)
 }
 
@@ -56,16 +56,16 @@ async function broadcast_insight(tx){
         .then(r=>r.json())
         .then(body=>{
             if(body.errors){
-                console.log(" Insight API return Errors: ")
-                console.log(err)
+                log(" Insight API return Errors: ", logLevel.INFO)
+                log(err, logLevel.INFO)
                 reject([tx.id,"Insight API return Errors: " + err.message.message])
             }else{
                 resolve(body)
             }
         })
         .catch(err=>{
-            console.log(" Insight API return Errors: ")
-            console.log(err)
+            log(" Insight API return Errors: ", logLevel.INFO)
+            log(err, logLevel.INFO)
             reject([tx.id,"Insight API return Errors: " + err])
         })
     })
@@ -78,7 +78,7 @@ async function broadcast_insight(tx){
 async function broadcast(tx, unBroadcast){
     try {
       const res = await broadcast_insight(tx)
-      console.log(`Broadcasted ${res.txid}`)
+      log(`Broadcasted ${res.txid}`, logLevel.INFO)
       return res
     } catch(e) {
       if(unBroadcast && Array.isArray(unBroadcast))unBroadcast.push(tx)
@@ -97,9 +97,9 @@ async function tryBroadcastAll(TXs){
       try {
         await broadcast(tx, unBroadcast)
       } catch([txid,err]) {
-        console.log(`${txid} 广播失败，原因 fail to broadcast:`)
-        console.log(err.split("\n")[0])
-        console.log(err.split("\n")[2])
+        log(`${txid} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
+        log(err.split("\n")[0], logLevel.INFO)
+        log(err.split("\n")[2], logLevel.INFO)
       }
     }
     return unBroadcast
@@ -111,11 +111,11 @@ async function tryBroadcastAll(TXs){
 */
 async function findExist(buf, mime) {
     var sha1 = bsv.crypto.Hash.sha1(buf).toString('hex')
-    if (global.verbose) console.log(sha1)
+    log(sha1, logLevel.VERBOSE)
     if (global.quick) return null
     var records = []
     if (!Array.isArray(records) || records.length == 0) {
-        if (global.verbose) console.log(" - 向BitDB搜索已存在的文件记录 Querying BitDB")
+        log(" - 向BitDB搜索已存在的文件记录 Querying BitDB", logLevel.VERBOSE)
         records = await BitDB.findExist(buf)
         records = records.filter(record => record.contenttype == mime)
     }
@@ -145,8 +145,8 @@ async function findD(key, address, value) {
     if (global.quick) return null
     //var dRecords = await BitDB.findD(key, address)
     if (!dRecords) {
-        if(global.verbose) console.log(`查询${address}下所有D记录中...`)
-        if(global.verbose) console.log(`Query all D records on ${address} from BitDB...`)
+        if(global.verbose) log(`查询${address}下所有D记录中...`, logLevel.INFO)
+        if(global.verbose) log(`Query all D records on ${address} from BitDB...`, logLevel.INFO)
         dRecords = await BitDB.findD(null, address)
     }
     var keyDRecords = dRecords.filter(record => record.key == key)
@@ -173,8 +173,8 @@ async function getTX(txid) {
                     }
                 })
                 .catch(err=>{
-                    console.log(`获取TX时发生错误 Error acquring TX ${txid}`)
-                    console.log(err)
+                    log(`获取TX时发生错误 Error acquring TX ${txid}`, logLevel.INFO)
+                    log(err, logLevel.INFO)
                     reject(err)
                 })
         }
@@ -192,13 +192,13 @@ async function getData(tx) {
     else {
         // 处理Bcat
         var bParts = bufs.slice(7).map(buf => buf.toString('hex'))
-        if (global.verbose) console.log("处理Bcat中。。。" + bParts)
+        log("处理Bcat中。。。" + bParts, logLevel.VERBOSE)
         var bPartTXs = await Promise.all(bParts.map(bPart => getTX(bPart)))
-        if (global.verbose) console.log(bPartTXs.map(tx => tx.id))
+        log(bPartTXs.map(tx => tx.id), logLevel.VERBOSE)
         var bPartBufs = bPartTXs.map(tx => tx.outputs.filter(out => out.script.isDataOut())[0].script.chunks[2].buf)
-        if (global.verbose) console.log(bPartBufs.map(buf => buf.length))
+        log(bPartBufs.map(buf => buf.length), logLevel.VERBOSE)
         var buf = bsv.deps.Buffer.concat(bPartBufs)
-        if (global.verbose) console.log(buf.length)
+        log(buf.length, logLevel.VERBOSE)
         return buf
     }
 }
@@ -219,6 +219,27 @@ function isDirectory(path){
     return false
 }
 
+const logLevel = {
+    NONE: -1,
+    CRITICAL: 0,
+    ERROR: 1,
+    WARNING: 2,
+    INFO: 3,
+    VERBOSE: 4
+}
+
+var currentLogLevel = logLevel.WARNING
+
+function setLogLevel(level){
+    currentLogLevel = level
+}
+
+function log(log, level){
+    if(!(level > currentLogLevel)){
+        log(log, logLevel.INFO)
+    }
+}
+
 module.exports = {
     transfer: transfer,
     findD: findD,
@@ -229,5 +250,8 @@ module.exports = {
     readFile: readFile,
     readDir: readDir,
     readFiles: readFiles,
-    isDirectory: isDirectory
+    isDirectory: isDirectory,
+    logLevel: logLevel,
+    setLogLevel: setLogLevel,
+    log: log
 }

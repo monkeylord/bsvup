@@ -69,31 +69,31 @@ async function prepareUpload(path, privkey, type, subdir){
     - file datum
 */
 async function getFileDatum(path, dirHandle, subdir){
-    console.log(`[+] Loading files from ${path}`)
-    if(global.verbose) console.log(`    Directory type: ${dirHandle}`)
-    if(global.verbose) console.log(`    Target sub directory: ${subdir}`)
+    API.log(`[+] Loading files from ${path}`, API.logLevel.INFO)
+    API.log(`    Directory type: ${dirHandle}`, API.logLevel.VERBOSE)
+    API.log(`    Target sub directory: ${subdir}`, API.logLevel.VERBOSE)
 
     var fileDatum = []
     var files = API.isDirectory(path)? API.readFiles(path) : [ path.split("/").reverse()[0] ]
     var basePath = API.isDirectory(path)? path : path.split("/").reverse().slice(1).reverse().join("/")
 
-    if(global.verbose) console.log(`    Base path: ${basePath}`)
-    if(global.verbose) console.log(`    Total: ${files.length} files`)
+    API.log(`    Base path: ${basePath}`, API.logLevel.VERBOSE)
+    API.log(`    Total: ${files.length} files`, API.logLevel.VERBOSE)
 
     for (file of files) {
-        if(global.verbose) console.log(` - File to read is ${file}`)
+        API.log(` - File to read is ${file}`, API.logLevel.VERBOSE)
         var { buf, mime } = API.isDirectory(file)? API.readDir(file, dirHandle) : API.readFile(file)
         if(!mime){
-            if(global.verbose) console.log(` - File data not found, skip`)
+            API.log(` - File data not found, skip`, API.logLevel.VERBOSE)
             continue
         }
         var relativePath = file.slice(basePath.length)
-        if(global.verbose) console.log(` - Reading ${API.isDirectory(file) ? "directory" : "file"}: ${relativePath}`)
+        API.log(` - Reading ${API.isDirectory(file) ? "directory" : "file"}: ${relativePath}`, API.logLevel.VERBOSE)
 
         var filename = (subdir + "/" + relativePath).replace(/\/\/+/g, '/')
         if (filename.startsWith('/')) filename = filename.slice(1)
         var dKey = encodeURI(filename)
-        if(global.verbose) console.log(`   D key: ${dKey}`)
+        API.log(`   D key: ${dKey}`, API.logLevel.VERBOSE)
 
         fileDatum.push({
             buf: buf,
@@ -122,19 +122,19 @@ async function getFileDatum(path, dirHandle, subdir){
     }]
 */
 async function reduceFileDatum(fileDatum, privkey){
-    console.log(`[+] Checking Exist Record`)
+    API.log(`[+] Checking Exist Record`, API.logLevel.INFO)
     for (fileData of fileDatum) {
-        console.log(` - Checking ${fileData.dKey}`)
+        API.log(` - Checking ${fileData.dKey}`, API.logLevel.INFO)
         var fileTX = await API.findExist(fileData.buf, fileData.mime).catch(err => null)
         if(fileTX){
-            console.log(`   Data found on chain.`)
+            API.log(`   Data found on chain.`, API.logLevel.INFO)
             fileData.bExist = true
             //fileData.buf = undefined    // Release Buffer
             fileData.dExist = false
             fileData.dValue = fileTX.id
             if(await API.findD(fileData.dKey, privkey.toAddress().toString(), fileTX.id)){
                 fileData.dExist = true
-                console.log(`   D Record found on chain.`)
+                API.log(`   D Record found on chain.`, API.logLevel.INFO)
             }
         }else {
             fileData.bExist = false
@@ -175,25 +175,25 @@ async function reduceFileDatum(fileDatum, privkey){
     ]
 */
 async function createUploadTasksEx(filedatum){
-    console.log(`[+] Creating Tasks`)
+    API.log(`[+] Creating Tasks`, API.logLevel.INFO)
     var tasks = []
     filedatum.forEach(filedata=>{
         if(!filedata.bExist){
-            if(global.verbose) console.log(` - Create B/D tasks for ${filedata.dKey}`)
+            API.log(` - Create B/D tasks for ${filedata.dKey}`, API.logLevel.VERBOSE)
             var bTasks = upload_FileTask(filedata.buf, filedata.mime)
             var dTask = upload_dTask(filedata.dKey, bTasks)
             tasks.push(dTask)
             bTasks.forEach(bTask => tasks.push(bTask))
         }else if(!filedata.dExist){
-            if(global.verbose) console.log(` - Create D tasks for ${filedata.dKey}`)
+            API.log(` - Create D tasks for ${filedata.dKey}`, API.logLevel.VERBOSE)
             var dTask = update_dTask(filedata.dKey, filedata.dValue)
             tasks.push(dTask)
         }else {
-            if(global.verbose) console.log(` - Ignore ${filedata.dKey}`)
+            API.log(` - Ignore ${filedata.dKey}`, API.logLevel.VERBOSE)
             // Both B and D Exist, no task needed.
         }
     })
-    if(tasks.length ==0)console.log("No task created.")
+    if(tasks.length ==0)API.log("No task created.", API.logLevel.WARNING)
     return tasks
 }
 
@@ -219,7 +219,7 @@ async function createUploadTasks(path, privkey, dirHandle, subdir){
         while (files.length > 0) {
             var file = files.pop()
             var { buf, mime } = API.readFile(file, dirHandle)
-            if (global.verbose) console.log(mime)
+            API.log(mime, API.logLevel.VERBOSE)
             // 如果不处理该文件，则跳过，是否处理暂时用mime标识。
             if (!mime) continue
             /*
@@ -230,19 +230,19 @@ async function createUploadTasks(path, privkey, dirHandle, subdir){
             if (subdir) filename = (subdir + "/" + filename).replace(/\/\/+/g, '/')
             if (filename.startsWith('/')) filename = filename.slice(1)
             filename = encodeURI(filename)
-            console.log(`正在处理 Handling ${filename}`)
+            API.log(`正在处理 Handling ${filename}`, API.logLevel.INFO)
             var fileTX = await API.findExist(buf, mime).catch(err => null)
             if (fileTX) {
                 // 如果链上文件存在，那么要判断是否已经存在D指向了
-                console.log(`${filename} - 找到了链上文件数据 File already on chain`)
-                if (global.verbose) console.log(fileTX.id)
+                API.log(`${filename} - 找到了链上文件数据 File already on chain`, API.logLevel.INFO)
+                API.log(fileTX.id, API.logLevel.VERBOSE)
                 var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
                 if (!dTX) {
                     // 链上文件存在而D不存在，则单纯做一次重新指向即可
                     var dTask = update_dTask(filename, fileTX.id)
                     tasks.push(dTask)
                 } else {
-                    console.log(`${filename} - 找到了链上D记录，无需上传 D record found, skip`)
+                    API.log(`${filename} - 找到了链上D记录，无需上传 D record found, skip`, API.logLevel.INFO)
                 }
             } else {
                 var fileTasks = upload_FileTask(buf, mime)
@@ -268,15 +268,15 @@ async function createUploadTasks(path, privkey, dirHandle, subdir){
         var fileTX = await API.findExist(buf, mime).catch(err => null)
         if (fileTX) {
             // 如果链上文件存在，那么要判断是否已经存在D指向了
-            console.log("找到了链上文件数据 File already on chain")
-            if (global.verbose) console.log(fileTX.id)
+            API.log("找到了链上文件数据 File already on chain", API.logLevel.INFO)
+            API.log(fileTX.id, API.logLevel.VERBOSE)
             var dTX = await API.findD(filename, privkey.toAddress().toString(), fileTX.id)
             if (!dTX) {
                 // 链上文件存在而D不存在，则单纯做一次重新指向即可
                 var dTask = update_dTask(path, fileTX.id)
                 tasks.push(dTask)
             } else {
-                console.log("找到了链上D记录，无需上传 D record found, skip")
+                API.log("找到了链上D记录，无需上传 D record found, skip", API.logLevel.INFO)
             }
         } else {
             var fileTasks = upload_FileTask(buf, mime)
@@ -286,7 +286,7 @@ async function createUploadTasks(path, privkey, dirHandle, subdir){
         }
     }
     if (tasks.length == 0) {
-        console.log("没有新内容需要上传 Nothing to upload")
+        API.log("没有新内容需要上传 Nothing to upload", API.logLevel.INFO)
         return tasks
     }
     return tasks
@@ -433,17 +433,17 @@ function update_dTask(key, value) {
 */
 async function fundTasks(tasks, privkey, utxos) {
     // 给任务添加的UTXO格式中应包含privkey
-    console.log(`[+] Funding Tasks`)
+    API.log(`[+] Funding Tasks`, API.logLevel.INFO)
     //var utxos = await API.getUTXOs(privkey.toAddress().toString())
     // 现在检查是否有足够的Satoshis
     var satoshisRequired = tasks.reduce((totalRequired, task)=>totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
     var satoshisProvided = utxos.reduce((totalProvided, utxo)=>totalProvided += (utxo.amount)? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
     if (satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT < 0) {
-        console.log(`当前地址为 ${privkey.toAddress()}`)
-        console.log(`Current Address ${privkey.toAddress()}`)
-        console.log(`当前地址余额不足以完成上传操作，差额大约为 ${satoshisRequired + tasks.length * SIZE_PER_OUTPUT - satoshisProvided} satoshis`)
-        console.log(`Insuffient satoshis, still need ${satoshisRequired + tasks.length * SIZE_PER_OUTPUT - satoshisProvided} satoshis`)
-        console.log("请使用 charge 命令获取转账地址二维码 Use charge command to acquire charge address QRCode")
+        API.log(`当前地址为 ${privkey.toAddress()}`, API.logLevel.WARNING)
+        API.log(`Current Address ${privkey.toAddress()}`, API.logLevel.WARNING)
+        API.log(`当前地址余额不足以完成上传操作，差额大约为 ${satoshisRequired + tasks.length * SIZE_PER_OUTPUT - satoshisProvided} satoshis`, API.logLevel.WARNING)
+        API.log(`Insuffient satoshis, still need ${satoshisRequired + tasks.length * SIZE_PER_OUTPUT - satoshisProvided} satoshis`, API.logLevel.WARNING)
+        API.log("请使用 charge 命令获取转账地址二维码 Use charge command to acquire charge address QRCode", API.logLevel.WARNING)
         throw new Error("Insuffient satoshis.")
     }
     var mytasks = tasks
@@ -502,7 +502,7 @@ async function fundTasks(tasks, privkey, utxos) {
             }]
         } else {
             // This means insuffient Satoshis
-            if(global.verbose)console.log("Insuffient Satoshis when funding tasks")
+            API.log("Insuffient Satoshis when funding tasks", API.logLevel.VERBOSE)
             myUtxos = []
         }
     }
@@ -513,7 +513,7 @@ async function fundTasks(tasks, privkey, utxos) {
         tasks.unshift(task)
     })
 
-    console.log(`预计总花费 Estimated fee : ${totalSpent} satoshis`)
+    API.log(`预计总花费 Estimated fee : ${totalSpent} satoshis`, API.logLevel.INFO)
 
     return tasks
 }
@@ -530,7 +530,7 @@ async function fundTasks(tasks, privkey, utxos) {
 
 */
 function pendTasks(tasks, privkey) {
-    console.log(`[+] Pending Tasks`)
+    API.log(`[+] Pending Tasks`, API.logLevel.INFO)
     // 假设：不存在依赖死锁或循环问题。所以可以通过有限次循环完成所有TX的生成
     while (!tasks.every(task => task.status == "pended")) {
         // 寻找可以直接生成的TX
@@ -564,7 +564,7 @@ function pendTasks(tasks, privkey) {
                     task.tx.sign(task.utxo.privkey)
                     break;
                 default:
-                    console.log("未知任务类型！")
+                    API.log("未知任务类型！", API.logLevel.ERROR)
                     throw new Error("Task Pending Error")
             }
             task.status = "pended"
@@ -583,11 +583,11 @@ function pendTasks(tasks, privkey) {
                     case "D":
                         // 假设：B TX的依赖在depTasks中第一个
                         task.out.value = task.deps.filter(task => (task.type == "B" || task.type == "Bcat"))[0].tx.id
-                        if (global.verbose) console.log(task.deps.map(task => task.tx.id))
+                        API.log(task.deps.map(task => task.tx.id), API.logLevel.VERBOSE)
                         break;
                     default:
                         // 按说只有Bcat和D要处理依赖。所以不应该执行到这里。
-                        console.log(`不应出现的任务类型:${task.type}`)
+                        API.log(`不应出现的任务类型:${task.type}`, API.logLevel.INFO)
                         throw new Error("Task Pending Error")
                 }
                 task.status = "ready"
@@ -607,9 +607,9 @@ function pendTasks(tasks, privkey) {
     - True if all tasks valid
 */
 function verifyTasks(tasks){
-    console.log(`[+] Verifying Tasks`)
+    API.log(`[+] Verifying Tasks`, API.logLevel.INFO)
     return tasks.every(task=>{
-        if(global.verbose)console.log(` - Verifying ${task.type} TX ${task.tx.id}`)
+        API.log(` - Verifying ${task.type} TX ${task.tx.id}`, API.logLevel.VERBOSE)
         return txutil.verifyTX(task.tx)
     })
 }

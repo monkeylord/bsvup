@@ -8,6 +8,7 @@
         - D
 */
 const bsv = require('bsv')
+const API = require('./api.js')
 
 const CHUNK_SIZE = 64000
 const FEE_PER_KB = 1536
@@ -35,9 +36,9 @@ const TX_SIZE_MAX = 1000000
     - (boolean) is Transaction valid
 */
 function verifyTX(tx) {
-    if (global.verbose) console.log(`Verifying ${tx.id}`)
+    API.log(`Verifying ${tx.id}`, API.logLevel.VERBOSE)
     if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
-        if (global.verbose) console.log(JSON.stringify(tx))
+        API.log(JSON.stringify(tx), API.logLevel.VERBOSE)
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     }
     else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
@@ -106,7 +107,7 @@ function retrieveUTXO(transaction, vout) {
 }
 
 function buildDTX(utxo, key, value, privKey) {
-    if (global.verbose) console.log(key)
+    API.log(key, API.logLevel.VERBOSE)
     var tx = bsv.Transaction()
     tx.from(utxo)
     tx.addOutput(buildDOut({

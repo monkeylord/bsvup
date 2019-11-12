@@ -14,7 +14,7 @@ const api = require("./api.js")
 const logic = require("./logic.js")
 const Cache = require("./cache.js")
 
-global.verbose = false
+api.setLogLevel(api.logLevel.INFO)
 global.quick = false
 
 var program = require('commander')
@@ -132,7 +132,7 @@ async function broadcast(){
 
 async function upload(){
     global.quick = (program.quick)?true:false
-    global.verbose = (program.verbose)?true:false
+    api.setLogLevel((program.verbose)?api.logLevel.VERBOSE:api.logLevel.INFO)
 
     var key = (program.key)?program.key:await loadKey()
     var path = (program.file)?program.file:process.cwd()
