@@ -1,6 +1,6 @@
 {
   "name": "bsvup",
-  "version": "1.4.8",
+  "version": "1.4.9",
   "description": "Put file/directory on BSV, using D protocol.",
   "main": "index.js",
   "bin": {
