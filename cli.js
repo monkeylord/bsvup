@@ -90,7 +90,7 @@ if (process.argv.filter(arg => (arg == "-n" || arg == "--newtask")).length == 0 
 }
 
 async function init(){
-    Cache.initCache()
+    Cache.init()
 
     // 记录私钥，并产生地址
     if (Cache.isKeyExist()) {
