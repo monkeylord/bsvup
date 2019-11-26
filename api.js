@@ -12,10 +12,13 @@ const insight = new explorer.Insight('https://api.bitindex.network')
 const bsv = require('bsv')
 const fs = require('fs')
 const BitDB = require('./bitdb.js')
-const MimeLookup = require('mime-lookup');
+const MimeLookup = require('mime-lookup')
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require("crypto")
 const Cache = require("./cache.js")
+var bitindex = require('bitindex-sdk').instance({
+    api_key: "4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj"
+});
 
 /*
     Handling transfer
@@ -36,6 +39,14 @@ async function transfer(address, key){
     Get UTXOs from insight API
 */
 async function getUTXOs(address){
+    log(`Requesting UTXOs for ${address}`, logLevel.INFO)
+    return bitindex.address.getUtxos([address]).then(utxos=>{
+        if(utxos.code){
+            log(`Error code ${utxos.code}: ${utxos.message}`, logLevel.WARNING)
+        }
+        return utxos
+    })
+    /*
     return new Promise((resolve, reject)=>{
         insight.getUtxos(address,(err,unspents)=>{
             if(err){
@@ -46,12 +57,27 @@ async function getUTXOs(address){
             }
         })
     })
+    */
 }
 
 /*
     Broadcast transaction though insight API
 */
 async function broadcast_insight(tx){
+
+    return bitindex.tx.send(tx.toString()).catch(async err=>{
+        log(" BitIndex API return Errors: ", logLevel.INFO)
+        log(err, logLevel.INFO)
+        let txexists = await bitindex.tx.get(tx.id)
+        if (txexists) {
+            log(" However, transaction is actually present.", logLevel.INFO)
+            return { txid: txexists.txid }
+        } else {
+            throw new Error([tx.id, "BitIndex API return Errors: " + err])
+        }
+    })
+
+    /*
     return new Promise((resolve, reject)=>{
         insight.broadcast(tx.toString(),(err,res)=>handleBroadcast(err,res))
         async function handleBroadcast(err,res){
@@ -73,7 +99,7 @@ async function broadcast_insight(tx){
             }
         }
     })
-    
+    */
 }
 
 /*
@@ -167,6 +193,16 @@ async function getTX(txid) {
         if (tx) {
             resolve(tx)
         } else {
+            bitindex.tx.getRaw(txid).then(res=>{
+                tx = bsv.Transaction(res.rawtx)
+                Cache.saveTX(tx)
+                resolve(tx)
+            }).catch(err => {
+                log(`获取TX时发生错误 Error acquring TX ${txid}`, logLevel.INFO)
+                log(err, logLevel.INFO)
+                reject(err)
+            })
+            /*
             insight.requestGet(`/api/tx/${txid}`, (err, res, body) => {
                 if (err || res.statusCode !== 200) reject(err || body)
                 //console.log(body)
@@ -180,6 +216,7 @@ async function getTX(txid) {
                     reject(err)
                 }
             })
+            */
         }
     }).catch(err => null)
 }
