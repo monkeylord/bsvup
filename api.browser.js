@@ -1,6 +1,30 @@
 const insight = 'https://api.bitindex.network'
 const bsv = require('bsv')
 const BitDB = require('./bitdb.js')
+var bitindex = require('bitindex-sdk').instance({
+    api_key: "4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj"
+});
+
+const logLevel = {
+    NONE: -1,
+    CRITICAL: 0,
+    ERROR: 1,
+    WARNING: 2,
+    INFO: 3,
+    VERBOSE: 4
+}
+
+var currentLogLevel = logLevel.WARNING
+
+function setLogLevel(level){
+    currentLogLevel = level
+}
+
+function log(log, level){
+    if(!(level > currentLogLevel)){
+        console.log(log)
+    }
+}
 
 /*
     Handling transfer
@@ -21,6 +45,16 @@ async function transfer(address, key){
     Get UTXOs from insight API
 */
 async function getUTXOs(address){
+    log(`Requesting UTXOs for ${address}`, logLevel.INFO)
+    return bitindex.address.getUtxos([address]).then(utxos=>{
+        if(utxos.code){
+            log(`Error code ${utxos.code}: ${utxos.message}`, logLevel.WARNING)
+        }
+        return utxos
+    })
+}
+/*
+async function getUTXOs(address){
     return new Promise((resolve, reject)=>{
         fetch(insight + "/api/addrs/utxo", {
             method: 'POST',
@@ -39,10 +73,26 @@ async function getUTXOs(address){
         })
     })
 }
+*/
 
 /*
     Broadcast transaction though insight API
 */
+async function broadcast_insight(tx){
+
+    return bitindex.tx.send(tx.toString()).catch(async err=>{
+        log(" BitIndex API return Errors: ", logLevel.INFO)
+        log(err, logLevel.INFO)
+        let txexists = await bitindex.tx.get(tx.id)
+        if (txexists) {
+            log(" However, transaction is actually present.", logLevel.INFO)
+            return { txid: txexists.txid }
+        } else {
+            throw new Error([tx.id, "BitIndex API return Errors: " + err])
+        }
+    })
+}
+/*
 async function broadcast_insight(tx){
     return new Promise((resolve, reject)=>{
         fetch(insight + "/api/tx/send", {
@@ -71,7 +121,7 @@ async function broadcast_insight(tx){
     })
     
 }
-
+*/
 /*
     Wrapped broadcast transaction, push unbroadcast transaction into unbroadcast array provided.
 */
@@ -119,7 +169,11 @@ async function findExist(buf, mime) {
         records = await BitDB.findExist(buf)
         records = records.filter(record => record.contenttype == mime)
     }
-    if (records.length == 0) return null
+    if (records.length == 0){
+        log(` - BitDB returned no matched`, logLevel.VERBOSE)
+        return null
+    }
+    log(` - BitDB returned ${records.length} matched`, logLevel.VERBOSE)
     var txs = await Promise.all(records.map(record => getTX(record.txid)))
     var matchTX = await Promise.race(txs.map(tx => {
         return new Promise(async (resolve, reject) => {
@@ -142,11 +196,11 @@ async function findExist(buf, mime) {
 */
 var dRecords = null
 async function findD(key, address, value) {
-    if (global.quick) return null
+    //if (global.quick) return null
     //var dRecords = await BitDB.findD(key, address)
     if (!dRecords) {
-        if(global.verbose) log(`查询${address}下所有D记录中...`, logLevel.INFO)
-        if(global.verbose) log(`Query all D records on ${address} from BitDB...`, logLevel.INFO)
+        log(`查询${address}下所有D记录中...`, logLevel.INFO)
+        log(`Query all D records on ${address} from BitDB...`, logLevel.INFO)
         dRecords = await BitDB.findD(null, address)
     }
     var keyDRecords = dRecords.filter(record => record.key == key)
@@ -155,6 +209,25 @@ async function findD(key, address, value) {
     else return false
 }
 
+async function getTX(txid) {
+    return new Promise((resolve, reject) => {
+        var tx = null //Cache.loadTX(txid)
+        if (tx) {
+            resolve(tx)
+        } else {
+            bitindex.tx.getRaw(txid).then(res=>{
+                tx = bsv.Transaction(res.rawtx)
+                //Cache.saveTX(tx)
+                resolve(tx)
+            }).catch(err => {
+                log(`获取TX时发生错误 Error acquring TX ${txid}`, logLevel.INFO)
+                log(err, logLevel.INFO)
+                reject(err)
+            })
+        }
+    }).catch(err => null)
+}
+/*
 async function getTX(txid) {
     return new Promise((resolve, reject) => {
         var tx = null // Cache.loadTX(txid)
@@ -180,7 +253,7 @@ async function getTX(txid) {
         }
     }).catch(err => null)
 }
-
+*/
 /*
     Extract B/Bcat data from transaction(s)
 */
@@ -219,26 +292,6 @@ function isDirectory(path){
     return false
 }
 
-const logLevel = {
-    NONE: -1,
-    CRITICAL: 0,
-    ERROR: 1,
-    WARNING: 2,
-    INFO: 3,
-    VERBOSE: 4
-}
-
-var currentLogLevel = logLevel.WARNING
-
-function setLogLevel(level){
-    currentLogLevel = level
-}
-
-function log(log, level){
-    if(!(level > currentLogLevel)){
-        log(log, logLevel.INFO)
-    }
-}
 
 module.exports = {
     transfer: transfer,
