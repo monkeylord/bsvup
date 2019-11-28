@@ -65,15 +65,20 @@ async function getUTXOs(address){
 */
 async function broadcast_insight(tx){
 
-    return bitindex.tx.send(tx.toString()).catch(async err=>{
+    return bitindex.tx.send(tx.toString()).then(r=>{
+        if(r.message && r.message.message){
+            throw r.message.message.split('\n').slice(0,3).join('\n')
+        }
+        return r.txid
+    }).catch(async err=>{
         log(" BitIndex API return Errors: ", logLevel.INFO)
         log(err, logLevel.INFO)
         let txexists = await bitindex.tx.get(tx.id)
-        if (txexists) {
+        if (txexists.txid) {
             log(" However, transaction is actually present.", logLevel.INFO)
-            return { txid: txexists.txid }
+            return txexists.txid
         } else {
-            throw new Error([tx.id, "BitIndex API return Errors: " + err])
+            throw [tx.id, "BitIndex API return Errors: " + err]
         }
     })
 
