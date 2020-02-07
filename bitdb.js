@@ -62,7 +62,7 @@ async function findD(key, address) {
     };
     try {
         r = await fetch(url, header)
-        r2 = await fetch2(url, header)
+        r2 = await fetch(url2, header)
     } catch(e) {
         console.log(e)
         return []
