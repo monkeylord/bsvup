@@ -121,7 +121,7 @@ function buildDTX(utxo, key, value, privKey) {
 }
 
 function buildDOut(dPayload) {
-    var dScript = bsv.Script.buildDataOut([
+    var dScript = bsv.Script.buildSafeDataOut([
         "19iG3WTYSsbyos3uJ733yK4zEioi1FesNU",
         encodeURI(dPayload.key),
         dPayload.value,
@@ -135,7 +135,7 @@ function buildDOut(dPayload) {
 }
 
 function buildBCatOut(bcatPayload) {
-    var dScript = bsv.Script.buildDataOut([
+    var dScript = bsv.Script.buildSafeDataOut([
         "15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up",
         bcatPayload.info,
         bcatPayload.mime,
@@ -150,7 +150,7 @@ function buildBCatOut(bcatPayload) {
 }
 
 function buildBCatPartOut(bcatPartPayload) {
-    var bcatPartScript = bsv.Script.buildDataOut([
+    var bcatPartScript = bsv.Script.buildSafeDataOut([
         "1ChDHzdd1H4wSjgGMHyndZm6qxEDGjqpJL",
         bcatPartPayload.data
     ])
@@ -161,7 +161,7 @@ function buildBCatPartOut(bcatPartPayload) {
 }
 
 function buildBOut(bPayload) {
-    var bScript = bsv.Script.buildDataOut([
+    var bScript = bsv.Script.buildSafeDataOut([
         "19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut",
         bPayload.data,
         bPayload.mime,

@@ -65,21 +65,28 @@ async function getUTXOs(address){
 */
 async function broadcast_insight(tx){
 
+    let txexists = await BitDB.findTx(tx.id)
+    if (txexists.length) {
+        log(" Transaction is actually present.", logLevel.INFO)
+        return tx.id
+    }
+
     return bitindex.tx.send(tx.toString()).then(r=>{
         if(r.message && r.message.message){
             throw r.message.message.split('\n').slice(0,3).join('\n')
+        }
+        if(!r.txid){
+            // 2020-02-04: this appears to indicate mattercloud rate limiting
+            log(r, logLevel.INFO)
+            log("Waiting 60s ...", logLevel.INFO)
+            return new Promise(resolve=>setTimeout(resolve,60000))
+                .then(()=>broadcast_insight(tx))
         }
         return r.txid
     }).catch(async err=>{
         log(" BitIndex API return Errors: ", logLevel.INFO)
         log(err, logLevel.INFO)
-        let txexists = await bitindex.tx.get(tx.id)
-        if (txexists.txid) {
-            log(" However, transaction is actually present.", logLevel.INFO)
-            return txexists.txid
-        } else {
-            throw [tx.id, "BitIndex API return Errors: " + err]
-        }
+        throw [tx.id, "BitIndex API return Errors: " + err]
     })
 
     /*
@@ -129,13 +136,21 @@ async function broadcast(tx, unBroadcast){
 async function tryBroadcastAll(TXs){
     var toBroadcast = TXs? TXs : Cache.loadUnbroadcast()
     var unBroadcast = []
+    var needToWait = false
     for (let tx of toBroadcast) {
       try {
-        await broadcast(tx, unBroadcast)
+        if (needToWait) {
+          unBroadcast.push(tx)
+        } else {
+          await broadcast(tx, unBroadcast)
+        }
       } catch([txid,err]) {
         log(`${txid} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
         log(err.split("\n")[0], logLevel.INFO)
         log(err.split("\n")[2], logLevel.INFO)
+        if (err.indexOf("too-long-mempool-chain") != -1) {
+          needToWait = true
+        }
       }
     }
     return Cache.saveUnbroadcast(unBroadcast)
