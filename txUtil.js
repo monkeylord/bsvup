@@ -35,13 +35,22 @@ const TX_SIZE_MAX = 1000000
     - (boolean) is Transaction valid
 */
 function verifyTX (tx) {
-  API.log(`Verifying ${tx.id}`, API.logLevel.VERBOSE)
-  if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
-    API.log(JSON.stringify(tx), API.logLevel.VERBOSE)
-    throw new Error(`${tx.id}: Insuffient Satoshis`)
-  } else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
-  else if (tx.toString().length > TX_SIZE_MAX) throw new Error(`${tx.id} Oversized`)
-  else return true
+  if(!isTXHasInputsInformation(tx)){
+    API.log(`Cannot verify ${tx.id}: Missing inputs information`, API.logLevel.VERBOSE)
+    return true
+  }
+  else {
+    API.log(`Verifying ${tx.id}`, API.logLevel.VERBOSE)
+    if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
+        API.log(JSON.stringify(tx), API.logLevel.VERBOSE)
+        throw new Error(`${tx.id}: Insuffient Satoshis`)
+    } else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
+    else if (tx.toString().length > TX_SIZE_MAX) throw new Error(`${tx.id} Oversized`)
+    else if (!tx.outputs.every(output=>output.satoshis>=546)) throw new Error(`${tx.id} Dust`)
+    else return true
+  }
+  
+
 }
 
 /*
@@ -204,7 +213,7 @@ var testDPayload = {
   'sequence': new Date().getTime().toString()
 }
 
-var privkeySigner = function (privKey) {
+function privkeySigner (privKey) {
   if (!(privKey instanceof bsv.PrivateKey)) throw new Error('Support BSV PrivateKey only')
   return async function (tx) {
     tx.change(privKey.toAddress())
@@ -212,6 +221,21 @@ var privkeySigner = function (privKey) {
     if (!signedTX.isFullySigned()) throw new Error('Not successful signed, privkey and utxos may be unmatched')
     return signedTX
   }
+}
+
+function isTXHasInputsInformation(tx){
+    if(!(tx instanceof bsv.Transaction))return false
+    return tx.inputs.every(input=>input.output)
+}
+
+function copyInputsInformation(txOrg, txDst){
+    var information = {}
+    txOrg.inputs.forEach(input => {
+        if(input.output)information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`] = input.output
+    })
+    txDst.inputs.forEach(input => {
+        if(information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`])input.output = information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`]
+    })
 }
 
 module.exports = {
@@ -224,6 +248,8 @@ module.exports = {
   prepareUtxos: prepareUtxos,
   retrieveUTXO: retrieveUTXO,
   privkeySigner: privkeySigner,
+  isTXHasInputsInformation: isTXHasInputsInformation,
+  copyInputsInformation: copyInputsInformation,
   testData: {
     testPrivateKey: testPrivateKey,
     testUtxo: testUtxo,

@@ -1,3 +1,4 @@
+const bsv = require('bsv')
 /*
     var fooDatum = [{
             buf: Buffer.from("Hello BSVUP"),
@@ -18,9 +19,9 @@
     This class is designed to pack logics behind bsvup into a easy to understand class.
     The goal is chained operations like:
 
-    var txs = new bsvup().setPrivkey(privkey).addFile(fileData).addDPath("testfile2.txt", "1234567890").addUtxos(utxos).buildTXs()
+        var txs = new bsvup().setPrivkey(privkey).addFile(fileData).addDPath("testfile2.txt", "1234567890").addUtxos(utxos).buildTXs()
     or
-    var txs = new bsvup().setPrivkey(privkey).setSigner(customSignerFunc).addFile(fileData).addDPath("testfile2.txt", "1234567890").addUtxos(utxos).buildTXs()
+        var txs = new bsvup().setAddress(customAddress).setSigner(customSignerFunc).addFile(fileData).addDPath("testfile2.txt", "1234567890").buildTXs()
 
 */
 
@@ -29,7 +30,7 @@ function bsvup (options) {
   this.fileDatum = []
   this.tasks = []
   this.utxos = []
-  this.privkey = null
+  this.address = null
   this.signer = null
 }
 
@@ -87,20 +88,26 @@ bsvup.prototype.addUtxos = function (utxos, privkey) {
   return this
 }
 
+bsvup.prototype.setAddress = function (address) {
+    this.address = address.toString()
+    return this
+}
+
 bsvup.prototype.setSigner = function (signer) {
   this.signer = signer
   return this
 }
 
 bsvup.prototype.setPrivkey = function (privkey) {
-  this.privkey = privkey
+  privkey = bsv.PrivateKey(privkey)
+  this.address = privkey.toAddress().toString()
   if (!this.signer) this.signer = bsvup.txUtil.privkeySigner(privkey)
   return this
 }
 
 bsvup.prototype.buildTXs = async function (isCheckExist) {
   if (!this.signer) throw new Error('No signer or privkey assigned')
-  if (!this.privkey) throw new Error('No privkey assigned')
+  if (!this.address) throw new Error('No address assigned')
   if (this.fileDatum.length === 0) throw new Error('No file provided')
 
   if (isCheckExist) {
@@ -110,7 +117,14 @@ bsvup.prototype.buildTXs = async function (isCheckExist) {
   }
 
   this.tasks = await bsvup.logic.createUploadTasks(this.fileDatum)
-  await bsvup.logic.fundTasksEx(this.tasks, this.privkey, this.utxos, this.signer)
+  if(this.utxos.length == 0){
+      try{
+        this.utxos = await bsvup.api.getUTXOs(this.address)
+      }catch(err){
+        throw new Error(`No utxo found for ${this.address}`)
+      }
+  }
+  await bsvup.logic.fundTasksEx(this.tasks, this.address, this.utxos, this.signer)
   await bsvup.logic.pendTasks(this.tasks)
 
   if (!this.verify()) throw new Error('Not all transactions valid.')
@@ -119,8 +133,9 @@ bsvup.prototype.buildTXs = async function (isCheckExist) {
 }
 
 bsvup.prototype.verify = function () {
-  var nonMaptasks = this.tasks.filter(task => task.type !== 'Map')
-  return bsvup.logic.verifyTasks(nonMaptasks)
+  //var nonMaptasks = this.tasks.filter(task => task.type !== 'Map')
+  //return bsvup.logic.verifyTasks(nonMaptasks)
+  return bsvup.logic.verifyTasks(this.tasks)
 }
 
 bsvup.prototype.getTXs = function () {

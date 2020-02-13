@@ -49,7 +49,7 @@ async function prepareUpload (path, privkey, type, subdir) {
   var UTXOs = await API.getUTXOs(privkey.toAddress().toString())
   await fundTasks(tasks, privkey, UTXOs)
   // pend tasks (known issue: Customized tasks may dead loop for dependencies cannot be solved)
-  pendTasks(tasks)
+  await pendTasks(tasks)
   // verify tasks (will throw error if failed)
   verifyTasks(tasks)
 
@@ -431,32 +431,34 @@ async function fundTasks (tasks, privkey, utxos) {
 
     signer is a async function which is expected to take unsigned maptx and return signed maptx.
 */
-async function fundTasksEx (tasks, DPrivkey, utxos, signer) {
+async function fundTasksEx (tasks, address, utxos, signer) {
   var mapTX = bsv.Transaction()
   var currentTasks = tasks
+  //var provided = utxos.reduce((total, utxo) => total += utxo.satoshis, 0)
+  var spent = 0
   utxos.forEach(utxo => mapTX.from(utxo))
   currentTasks.forEach(task => {
     // 创建输出
-    mapTX.to(DPrivkey.toAddress(), Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
+    mapTX.to(address, Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
     // 用刚创建的输出构建UTXO
     task.utxo = {
-      privkey: DPrivkey,
+      signer: signer,
       txid: null,
       vout: mapTX.outputs.length - 1,
       address: mapTX.outputs[mapTX.outputs.length - 1].script.toAddress().toString(),
       script: mapTX.outputs[mapTX.outputs.length - 1].script.toHex(),
       satoshis: mapTX.outputs[mapTX.outputs.length - 1].satoshis
     }
+    spent += task.utxo.satoshis
   })
   if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000) {
     if(utxos[0].address)mapTX.change(utxos[0].address)
     mapTX.feePerKb(FEE_PER_KB)
   }
   var signedMapTX = bsv.Transaction(await signer(mapTX))
+  txutil.copyInputsInformation(mapTX, signedMapTX)
   currentTasks.forEach(task => task.utxo.txid = signedMapTX.id)
-  var provided = utxos.reduce((total, utxo) => total += utxo.satoshis, 0)
-  var change = (mapTX.getChangeOutput()) ? mapTX.getChangeOutput().satoshis : 0
-  var spent = provided - change
+
   var mapTask = {
     type: 'Map',
     status: 'pended',
@@ -479,7 +481,7 @@ async function fundTasksEx (tasks, DPrivkey, utxos, signer) {
     - Pended tasks
 
 */
-function pendTasks (tasks, privkey) {
+async function pendTasks (tasks, privkey) {
   API.log(`[+] Pending Tasks`, API.logLevel.INFO)
   // 假设：不存在依赖死锁或循环问题。所以可以通过有限次循环完成所有TX的生成
   while (!tasks.every(task => task.status === 'pended')) {
@@ -487,38 +489,64 @@ function pendTasks (tasks, privkey) {
     var readyTasks = tasks.filter(task => task.status === 'ready')
     // 生成TX并更新这些任务的状态为 pended
     // 假设：Task里所有的UTXO都是计算过手续费的正好的UTXO
-    readyTasks.forEach(task => {
+    for(var task of readyTasks){
+    //readyTasks.forEach(task => {
       switch (task.type) {
         case 'B':
           task.tx = bsv.Transaction()
           task.tx.from(task.utxo)
           task.tx.addOutput(txutil.buildBOut(task.out))
-          task.tx.sign(task.utxo.privkey)
+          if(task.utxo.privkey)task.tx.sign(task.utxo.privkey)
+          else if(task.utxo.signer){
+            var signedTX = await task.utxo.signer(task.tx)
+            txutil.copyInputsInformation(task.tx, signedTX)
+            task.tx = signedTX
+          }
+          else throw new Error("Task not funded, no privkey nor signer found for utxo.")
           break
         case 'Bcat':
           task.tx = bsv.Transaction()
           task.tx.from(task.utxo)
           task.tx.addOutput(txutil.buildBCatOut(task.out))
-          task.tx.sign(task.utxo.privkey)
+          if(task.utxo.privkey)task.tx.sign(task.utxo.privkey)
+          else if(task.utxo.signer){
+            var signedTX = await task.utxo.signer(task.tx)
+            txutil.copyInputsInformation(task.tx, signedTX)
+            task.tx = signedTX
+          }
+          else throw new Error("Task not funded, no privkey nor signer found.")
           break
         case 'BcatPart':
           task.tx = bsv.Transaction()
           task.tx.from(task.utxo)
           task.tx.addOutput(txutil.buildBCatPartOut(task.out))
-          task.tx.sign(task.utxo.privkey)
+          if(task.utxo.privkey)task.tx.sign(task.utxo.privkey)
+          else if(task.utxo.signer){
+            var signedTX = await task.utxo.signer(task.tx)
+            txutil.copyInputsInformation(task.tx, signedTX)
+            task.tx = signedTX
+          }
+          else throw new Error("Task not funded, no privkey nor signer found.")
           break
         case 'D':
           task.tx = bsv.Transaction()
           task.tx.from(task.utxo)
           task.tx.addOutput(txutil.buildDOut(task.out))
-          task.tx.sign(task.utxo.privkey)
+          if(task.utxo.privkey)task.tx.sign(task.utxo.privkey)
+          else if(task.utxo.signer){
+            var signedTX = await task.utxo.signer(task.tx)
+            txutil.copyInputsInformation(task.tx, signedTX)
+            task.tx = signedTX
+          }
+          else throw new Error("Task not funded, no privkey nor signer found.")
           break
         default:
           API.log('未知任务类型！', API.logLevel.ERROR)
           throw new Error('Task Pending Error')
       }
       task.status = 'pended'
-    })
+    //})
+    }
     // 更新Task状态
     var prependTasks = tasks.filter(task => task.status === 'prepend')
     prependTasks.forEach(task => {
