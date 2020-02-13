@@ -83,7 +83,7 @@ async function broadcastInsight (tx) {
   }).catch(async err => {
     log(' BitIndex API return Errors: ', logLevel.INFO)
     log(err, logLevel.INFO)
-    throw new Error([tx.id, 'BitIndex API return Errors: ' + err])
+    throw [tx.id, 'BitIndex API return Errors: ' + err]
   })
 
   /*

@@ -18,7 +18,7 @@
     This class is designed to pack logics behind bsvup into a easy to understand class.
     The goal is chained operations like:
 
-    var txs = new bsvup().setPrivkey(privkey).addFile(fileData).addDPath("testfile2.txt", "1234567890").addUtxos(utxos).broadcast()
+    var txs = new bsvup().setPrivkey(privkey).addFile(fileData).addDPath("testfile2.txt", "1234567890").addUtxos(utxos).buildTXs()
     or
     var txs = new bsvup().setPrivkey(privkey).setSigner(customSignerFunc).addFile(fileData).addDPath("testfile2.txt", "1234567890").addUtxos(utxos).buildTXs()
 
@@ -125,13 +125,6 @@ bsvup.prototype.verify = function () {
 
 bsvup.prototype.getTXs = function () {
   return bsvup.logic.getTXs(this.tasks)
-}
-
-bsvup.prototype.broadcast = function () {
-  return this.buildTXs().then(txs => {
-    bsvup.api.tryBroadcastAll(txs)
-    return txs
-  })
 }
 
 module.exports = bsvup

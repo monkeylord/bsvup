@@ -13,11 +13,11 @@ async function findTx (id) {
   var r
   try {
     r = await fetch(url, header)
+    r = await r.json()
   } catch (e) {
     console.log(e)
     return []
   }
-  r = await r.json()
   return r.u.concat(r.c)
 }
 
@@ -37,12 +37,12 @@ async function findExist (buffer) {
   try {
     r = await fetch(url, header)
     r2 = await fetch(url2, header)
+    r = await r.json()
+    r2 = await r2.json()
   } catch (e) {
     console.log(e)
     return []
   }
-  r = await r.json()
-  r2 = await r2.json()
   r = r2.u.concat(r2.c, r.c)
   return r.filter(record => (
     record.prefix === '15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up' || record.prefix === '19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut'
@@ -64,12 +64,13 @@ async function findD (key, address) {
   try {
     r = await fetch(url, header)
     r2 = await fetch(url2, header)
+    r = await r.json()
+    r2 = await r2.json()
   } catch (e) {
     console.log(e)
     return []
   }
-  r = await r.json()
-  r2 = await r2.json()
+
   r = r2.u.concat(r2.c, r.c)
   return r.sort((a, b) => b.sequence - a.sequence)
 }

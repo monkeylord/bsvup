@@ -91,7 +91,7 @@ async function broadcastInsight (tx) {
       log(' However, transaction is actually present.', logLevel.INFO)
       return { txid: txexists.txid }
     } else {
-      throw new Error([tx.id, 'BitIndex API return Errors: ' + err])
+      throw [tx.id, 'BitIndex API return Errors: ' + err]
     }
   })
 }
