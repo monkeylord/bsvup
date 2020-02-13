@@ -207,6 +207,7 @@ var testDPayload = {
 var privkeySigner = function (privKey) {
   if (!(privKey instanceof bsv.PrivateKey)) throw new Error('Support BSV PrivateKey only')
   return async function (tx) {
+    tx.change(privKey.toAddress())
     var signedTX = tx.sign(privKey)
     if (!signedTX.isFullySigned()) throw new Error('Not successful signed, privkey and utxos may be unmatched')
     return signedTX

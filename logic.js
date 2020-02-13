@@ -449,7 +449,7 @@ async function fundTasksEx (tasks, DPrivkey, utxos, signer) {
     }
   })
   if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000) {
-    mapTX.change(privkey.toAddress())
+    if(utxos[0].address)mapTX.change(utxos[0].address)
     mapTX.feePerKb(FEE_PER_KB)
   }
   var signedMapTX = bsv.Transaction(await signer(mapTX))
