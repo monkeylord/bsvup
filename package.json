@@ -1,6 +1,6 @@
 {
   "name": "bsvup",
-  "version": "1.5.1",
+  "version": "1.6.0",
   "description": "Put file/directory on BSV, using D protocol.",
   "main": "index.js",
   "bin": {
@@ -24,6 +24,7 @@
     "bsv": "latest"
   },
   "devDependencies": {
+    "webpack": "^4.41.6",
     "webpack-cli": "^3.3.9"
   },
   "scripts": {

@@ -207,6 +207,14 @@ var testDPayload = {
     "sequence": new Date().getTime().toString()
 }
 
+var privkeySigner = function(privKey){
+    if(!(privKey instanceof bsv.PrivateKey))throw new Error("Support BSV PrivateKey only")
+    return async function(tx){
+        var signedTX =  tx.sign(privKey)
+        if(!signedTX.isFullySigned())throw new Error("Not successful signed, privkey and utxos may be unmatched")
+        return signedTX
+    }
+}
 
 module.exports = {
     verifyTX: verifyTX,
@@ -216,5 +224,6 @@ module.exports = {
     buildDOut: buildDOut,
     buildDTX: buildDTX,
     prepareUtxos: prepareUtxos,
-    retrieveUTXO: retrieveUTXO
+    retrieveUTXO: retrieveUTXO,
+    privkeySigner: privkeySigner
 }

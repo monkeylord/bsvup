@@ -70,7 +70,7 @@ async function findD(key, address) {
     r = await r.json()
     r2 = await r2.json()
     r = r2.u.concat(r2.c, r.c)
-    return r.sort((a, b) => b.sequence - a.sequence))
+    return r.sort((a, b) => b.sequence - a.sequence)
 }
 
 function queryTx(id) {

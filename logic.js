@@ -36,7 +36,7 @@ const SIZE_PER_OUTPUT = 100
 /*
     Wrap task lifecircle, read file datum from fs, create tasks and make tasks ready to broadcast
 */
-async function prepareUpload(path, privkey, type, subdir){
+async function prepareUpload(path, privkey, type, subdir) {
     // read files
     var fileDatum = await getFileDatum(path, type, subdir)
     // check existed
@@ -44,7 +44,7 @@ async function prepareUpload(path, privkey, type, subdir){
     // create tasks
     var tasks = await createUploadTasksEx(fileDatum)
     //var tasks = await createUploadTasks(path, privkey, type, subdir)
-    if(tasks.length == 0) return tasks
+    if (tasks.length == 0) return tasks
     // fund tasks (Throw insuffient satoshis error if not enough)
     var UTXOs = await API.getUTXOs(privkey.toAddress().toString())
     await fundTasks(tasks, privkey, UTXOs)
@@ -68,22 +68,22 @@ async function prepareUpload(path, privkey, type, subdir){
     Output
     - file datum
 */
-async function getFileDatum(path, dirHandle, subdir){
+async function getFileDatum(path, dirHandle, subdir) {
     API.log(`[+] Loading files from ${path}`, API.logLevel.INFO)
     API.log(`    Directory type: ${dirHandle}`, API.logLevel.VERBOSE)
     API.log(`    Target sub directory: ${subdir}`, API.logLevel.VERBOSE)
 
     var fileDatum = []
-    var files = API.isDirectory(path)? API.readFiles(path) : [ path.split("/").reverse()[0] ]
-    var basePath = API.isDirectory(path)? path : path.split("/").reverse().slice(1).reverse().join("/")
+    var files = API.isDirectory(path) ? API.readFiles(path) : [path.split("/").reverse()[0]]
+    var basePath = API.isDirectory(path) ? path : path.split("/").reverse().slice(1).reverse().join("/")
 
     API.log(`    Base path: ${basePath}`, API.logLevel.VERBOSE)
     API.log(`    Total: ${files.length} files`, API.logLevel.VERBOSE)
 
     for (file of files) {
         API.log(` - File to read is ${file}`, API.logLevel.VERBOSE)
-        var { buf, mime } = API.isDirectory(file)? API.readDir(file, dirHandle) : API.readFile(file)
-        if(!mime){
+        var { buf, mime } = API.isDirectory(file) ? API.readDir(file, dirHandle) : API.readFile(file)
+        if (!mime) {
             API.log(` - File data not found, skip`, API.logLevel.VERBOSE)
             continue
         }
@@ -121,22 +121,22 @@ async function getFileDatum(path, dirHandle, subdir){
         dKey: "foo/file.txt",
     }]
 */
-async function reduceFileDatum(fileDatum, privkey){
+async function reduceFileDatum(fileDatum, privkey) {
     API.log(`[+] Checking Exist Record`, API.logLevel.INFO)
     for (fileData of fileDatum) {
         API.log(` - Checking ${fileData.dKey}`, API.logLevel.INFO)
         var fileTX = await API.findExist(fileData.buf, fileData.mime).catch(err => null)
-        if(fileTX){
+        if (fileTX) {
             API.log(`   Data found on chain.`, API.logLevel.INFO)
             fileData.bExist = true
             //fileData.buf = undefined    // Release Buffer
             fileData.dExist = false
             fileData.dValue = fileTX.id
-            if(await API.findD(fileData.dKey, privkey.toAddress().toString(), fileTX.id)){
+            if (await API.findD(fileData.dKey, privkey.toAddress().toString(), fileTX.id)) {
                 fileData.dExist = true
                 API.log(`   D Record found on chain.`, API.logLevel.INFO)
             }
-        }else {
+        } else {
             fileData.bExist = false
             fileData.dExist = false
         }
@@ -174,26 +174,26 @@ async function reduceFileDatum(fileDatum, privkey){
         }
     ]
 */
-async function createUploadTasksEx(filedatum){
+async function createUploadTasksEx(filedatum) {
     API.log(`[+] Creating Tasks`, API.logLevel.INFO)
     var tasks = []
-    filedatum.forEach(filedata=>{
-        if(!filedata.bExist){
+    filedatum.forEach(filedata => {
+        if (!filedata.bExist) {
             API.log(` - Create B/D tasks for ${filedata.dKey}`, API.logLevel.VERBOSE)
             var bTasks = upload_FileTask(filedata.buf, filedata.mime)
             var dTask = upload_dTask(filedata.dKey, bTasks)
             tasks.push(dTask)
             bTasks.forEach(bTask => tasks.push(bTask))
-        }else if(!filedata.dExist){
+        } else if (!filedata.dExist) {
             API.log(` - Create D tasks for ${filedata.dKey}`, API.logLevel.VERBOSE)
             var dTask = update_dTask(filedata.dKey, filedata.dValue)
             tasks.push(dTask)
-        }else {
+        } else {
             API.log(` - Ignore ${filedata.dKey}`, API.logLevel.VERBOSE)
             // Both B and D Exist, no task needed.
         }
     })
-    if(tasks.length ==0)API.log("No task created.", API.logLevel.WARNING)
+    if (tasks.length == 0) API.log("No task created.", API.logLevel.WARNING)
     return tasks
 }
 
@@ -210,7 +210,7 @@ async function createUploadTasksEx(filedatum){
     Output
     - Tasks
 */
-async function createUploadTasks(path, privkey, dirHandle, subdir){
+async function createUploadTasks(path, privkey, dirHandle, subdir) {
     // 准备上传任务
     var tasks = []
     if (API.isDirectory(path)) {
@@ -436,8 +436,8 @@ async function fundTasks(tasks, privkey, utxos) {
     API.log(`[+] Funding Tasks`, API.logLevel.INFO)
     //var utxos = await API.getUTXOs(privkey.toAddress().toString())
     // 现在检查是否有足够的Satoshis
-    var satoshisRequired = tasks.reduce((totalRequired, task)=>totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
-    var satoshisProvided = utxos.reduce((totalProvided, utxo)=>totalProvided += (utxo.amount)? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
+    var satoshisRequired = tasks.reduce((totalRequired, task) => totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
+    var satoshisProvided = utxos.reduce((totalProvided, utxo) => totalProvided += (utxo.amount) ? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
     if (satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT < 0) {
         API.log(`当前地址为 ${privkey.toAddress()}`, API.logLevel.WARNING)
         API.log(`Current Address ${privkey.toAddress()}`, API.logLevel.WARNING)
@@ -515,6 +515,51 @@ async function fundTasks(tasks, privkey, utxos) {
 
     API.log(`预计总花费 Estimated fee : ${totalSpent} satoshis`, API.logLevel.INFO)
 
+    return tasks
+}
+
+
+/*
+    Fund tasks with external signer, for situation "I don't have the private key for utxos".
+    Like you are using a external wallet to do the signing.
+    In this situation, you still need a separated private key, which is mainly used to for D protocol and is for your identity.
+
+    signer is a async function which is expected to take unsigned maptx and return signed maptx.
+*/
+async function fundTasksEx(tasks, DPrivkey, utxos, signer) {
+    var mapTX = bsv.Transaction()
+    var currentTasks = tasks
+    utxos.forEach(utxo => mapTX.from(utxo))
+    currentTasks.forEach(task => {
+        // 创建输出
+        mapTX.to(DPrivkey.toAddress(), Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
+        // 用刚创建的输出构建UTXO
+        task.utxo = {
+            privkey: DPrivkey,
+            txid: null,
+            vout: mapTX.outputs.length - 1,
+            address: mapTX.outputs[mapTX.outputs.length - 1].script.toAddress().toString(),
+            script: mapTX.outputs[mapTX.outputs.length - 1].script.toHex(),
+            satoshis: mapTX.outputs[mapTX.outputs.length - 1].satoshis
+        }
+    })
+    if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000) {
+        mapTX.change(privkey.toAddress())
+        mapTX.feePerKb(FEE_PER_KB)
+    }
+    var signedMapTX = bsv.Transaction(await signer(mapTX))
+    currentTasks.forEach(task => task.utxo.txid = signedMapTX.id)
+    var provided = utxos.reduce((total, utxo) => total += utxo.satoshis, 0)
+    var change = (mapTX.getChangeOutput()) ? mapTX.getChangeOutput().satoshis : 0
+    var spent = provided - change
+    mapTask = {
+        type: "Map",
+        status: "pended",
+        // 总花费
+        satoshis: spent,
+        tx: signedMapTX
+    }
+    tasks.unshift(mapTask)
     return tasks
 }
 
@@ -606,9 +651,9 @@ function pendTasks(tasks, privkey) {
     Output
     - True if all tasks valid
 */
-function verifyTasks(tasks){
+function verifyTasks(tasks) {
     API.log(`[+] Verifying Tasks`, API.logLevel.INFO)
-    return tasks.every(task=>{
+    return tasks.every(task => {
         API.log(` - Verifying ${task.type} TX ${task.tx.id}`, API.logLevel.VERBOSE)
         return txutil.verifyTX(task.tx)
     })
@@ -623,16 +668,20 @@ function verifyTasks(tasks){
     Output
     - TXs
 */
-function getTXs(tasks){
-    return tasks.map(task=>task.tx)
+function getTXs(tasks) {
+    return tasks.map(task => task.tx)
 }
 
 module.exports = {
-    createUploadTasks : createUploadTasksEx,
+    createUploadTasks: createUploadTasksEx,
     reduceFileDatum: reduceFileDatum,
-    fundTasks : fundTasks,
+    fundTasks: fundTasks,
+    fundTasksEx: fundTasksEx,
     pendTasks: pendTasks,
     verifyTasks: verifyTasks,
-    getTXs : getTXs,
-    prepareUpload : prepareUpload
+    getTXs: getTXs,
+    prepareUpload: prepareUpload,
+    update_dTask: update_dTask,
+    upload_dTask: upload_dTask,
+    upload_FileTask: upload_FileTask
 }
