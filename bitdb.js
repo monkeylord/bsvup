@@ -44,7 +44,7 @@ async function findExist (buffer) {
     return []
   }
   r = r2.u.concat(r2.c, r.c)
-  return r.filter(record => (
+  return r.filter(record => record.prefix && (
     record.prefix === '15DHFxWZJT58f9nhyGnsRBqrgwK4W6h4Up' || record.prefix === '19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut'
   ))
 }

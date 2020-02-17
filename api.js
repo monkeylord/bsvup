@@ -14,9 +14,15 @@ const MimeLookup = require('mime-lookup')
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require('crypto')
 const Cache = require('./cache.js')
+/*
 var bitindex = require('bitindex-sdk').instance({
   api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
 })
+*/
+var mattercloud = require('mattercloudjs').instance({
+  api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
+})
+var axios = require('axios')
 
 /*
     Handling transfer
@@ -38,7 +44,7 @@ async function transfer (address, key) {
 */
 async function getUTXOs (address) {
   log(`Requesting UTXOs for ${address}`, logLevel.INFO)
-  return bitindex.address.getUtxos([address]).then(utxos => {
+  return mattercloud.getUtxos([address]).then(utxos => {
     if (utxos.code) {
       log(`Error code ${utxos.code}: ${utxos.message}`, logLevel.WARNING)
     }
@@ -68,7 +74,7 @@ async function broadcastInsight (tx) {
     return tx.id
   }
 
-  return bitindex.tx.send(tx.toString()).then(r => {
+  return mattercloud.sendRawTx(tx.toString()).then(r => {
     if (r.message && r.message.message) {
       throw r.message.message.split('\n').slice(0, 3).join('\n')
     }
@@ -81,9 +87,9 @@ async function broadcastInsight (tx) {
     }
     return r.txid
   }).catch(async err => {
-    log(' BitIndex API return Errors: ', logLevel.INFO)
+    log(' MatterCloud API return Errors: ', logLevel.INFO)
     log(err, logLevel.INFO)
-    throw [tx.id, 'BitIndex API return Errors: ' + err]
+    throw [tx.id, 'MatterCloud API return Errors: ' + err]
   })
 
   /*
@@ -215,7 +221,9 @@ async function getTX (txid) {
     if (tx) {
       resolve(tx)
     } else {
-      bitindex.tx.getRaw(txid).then(res => {
+      // Access mattercloud with Insight API
+      //mattercloud.getTx(txid).then(res => {
+      axios.get(`https://api.mattercloud.net/api/rawtx/${txid}`).then(res=>res.data).then(res => {
         tx = bsv.Transaction(res.rawtx)
         Cache.saveTX(tx)
         resolve(tx)

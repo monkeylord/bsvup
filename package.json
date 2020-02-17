@@ -1,6 +1,6 @@
 {
   "name": "bsvup",
-  "version": "1.6.3",
+  "version": "1.6.4",
   "description": "Put file/directory on BSV, using D protocol.",
   "main": "index.js",
   "bin": {
@@ -10,10 +10,10 @@
   "dependencies": {
     "bitcoin-ibe": "^1.2.2",
     "bitcore-explorers": "github:bitpay/bitcore-explorers#1f1334f7ea7f75ed80f62d379613a961a66403f2",
-    "bitindex-sdk": "^3.4.0",
     "bsv": "^1.3.0",
     "commander": "^2.20.0",
     "inquirer": "^6.5.0",
+    "mattercloudjs": "^1.0.6",
     "mime": "^2.4.4",
     "mime-db": "^1.40.0",
     "mime-lookup": "^0.0.2",

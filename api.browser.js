@@ -1,8 +1,14 @@
 const bsv = require('bsv')
 const BitDB = require('./bitdb.js')
+/*
 var bitindex = require('bitindex-sdk').instance({
   api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
 })
+*/
+var mattercloud = require('mattercloudjs').instance({
+  api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
+})
+var axios = require('axios')
 
 const logLevel = {
   NONE: -1,
@@ -45,7 +51,7 @@ async function transfer (address, key) {
 */
 async function getUTXOs (address) {
   log(`Requesting UTXOs for ${address}`, logLevel.INFO)
-  return bitindex.address.getUtxos([address]).then(utxos => {
+  return mattercloud.getUtxos([address]).then(utxos => {
     if (utxos.code) {
       log(`Error code ${utxos.code}: ${utxos.message}`, logLevel.WARNING)
     }
@@ -78,20 +84,20 @@ async function getUTXOs(address){
     Broadcast transaction though insight API
 */
 async function broadcastInsight (tx) {
-  return bitindex.tx.send(tx.toString()).then(r => {
+  return mattercloud.sendRawTx(tx.toString()).then(r => {
     if (r.message && r.message.message) {
       throw r.message.message.split('\n').slice(0, 3).join('\n')
     }
     return r.txid
   }).catch(async err => {
-    log(' BitIndex API return Errors: ', logLevel.INFO)
+    log(' MatterCloud API return Errors: ', logLevel.INFO)
     log(err, logLevel.INFO)
-    let txexists = await bitindex.tx.get(tx.id)
+    let txexists = await getTX(tx.id)
     if (txexists.txid) {
       log(' However, transaction is actually present.', logLevel.INFO)
       return { txid: txexists.txid }
     } else {
-      throw [tx.id, 'BitIndex API return Errors: ' + err]
+      throw [tx.id, 'MatterCloud API return Errors: ' + err]
     }
   })
 }
@@ -223,7 +229,8 @@ async function getTX (txid) {
     if (tx) {
       resolve(tx)
     } else {
-      bitindex.tx.getRaw(txid).then(res => {
+      //bitindex.tx.getRaw(txid).then(res => {
+      axios.get(`https://api.mattercloud.net/api/rawtx/${txid}`).then(res=>res.data).then(res => {
         tx = bsv.Transaction(res.rawtx)
         // Cache.saveTX(tx)
         resolve(tx)
