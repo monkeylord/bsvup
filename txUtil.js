@@ -46,7 +46,7 @@ function verifyTX (tx) {
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     } else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
     else if (tx.toString().length > TX_SIZE_MAX) throw new Error(`${tx.id} Oversized`)
-    else if (!tx.outputs.every(output=>output.satoshis>=546)) throw new Error(`${tx.id} Dust`)
+    else if (!tx.outputs.every(output=>output.satoshis>=DUST_LIMIT)) throw new Error(`${tx.id} Dust`)
     else return true
   }
   
@@ -135,7 +135,7 @@ function buildDOut (dPayload) {
     dPayload.sequence
   ])
   return bsv.Transaction.Output({
-    satoshis: 0,
+    satoshis: DUST_LIMIT,
     script: dScript.toHex()
   })
 }
@@ -150,7 +150,7 @@ function buildBCatOut (bcatPayload) {
     bcatPayload.flag
   ].concat(bcatPayload.chunks.map(txid => Buffer.from(txid, 'hex'))))
   return bsv.Transaction.Output({
-    satoshis: 0,
+    satoshis: DUST_LIMIT,
     script: dScript.toHex()
   })
 }
@@ -161,7 +161,7 @@ function buildBCatPartOut (bcatPartPayload) {
     bcatPartPayload.data
   ])
   return bsv.Transaction.Output({
-    satoshis: 0,
+    satoshis: DUST_LIMIT,
     script: bcatPartScript.toHex()
   })
 }
@@ -175,7 +175,7 @@ function buildBOut (bPayload) {
     bPayload.filename
   ])
   return bsv.Transaction.Output({
-    satoshis: 0,
+    satoshis: DUST_LIMIT,
     script: bScript.toHex()
   })
 }

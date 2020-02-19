@@ -342,7 +342,7 @@ async function fundTasks (tasks, privkey, utxos) {
   API.log(`[+] Funding Tasks`, API.logLevel.INFO)
   // var utxos = await API.getUTXOs(privkey.toAddress().toString())
   // 现在检查是否有足够的Satoshis
-  var satoshisRequired = tasks.reduce((totalRequired, task) => totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
+  var satoshisRequired = tasks.reduce((totalRequired, task) => totalRequired += task.satoshis + BASE_TX + DUST_LIMIT, 0)
   var satoshisProvided = utxos.reduce((totalProvided, utxo) => totalProvided += (utxo.amount) ? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
   if (satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT < 0) {
     API.log(`当前地址为 ${privkey.toAddress()}`, API.logLevel.WARNING)
@@ -366,7 +366,7 @@ async function fundTasks (tasks, privkey, utxos) {
     myUtxos.forEach(utxo => mapTX.from(utxo))
     currentTasks.forEach(task => {
       // 创建输出
-      mapTX.to(privkey.toAddress(), Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
+      mapTX.to(privkey.toAddress(), task.satoshis + BASE_TX + DUST_LIMIT)
       // 用刚创建的输出构建UTXO
       task.utxo = {
         privkey: privkey,
@@ -439,7 +439,7 @@ async function fundTasksEx (tasks, address, utxos, signer) {
   utxos.forEach(utxo => mapTX.from(utxo))
   currentTasks.forEach(task => {
     // 创建输出
-    mapTX.to(address, Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
+    mapTX.to(address, task.satoshis + BASE_TX + DUST_LIMIT)
     // 用刚创建的输出构建UTXO
     task.utxo = {
       signer: signer,
