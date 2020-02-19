@@ -262,6 +262,7 @@ async function getData (tx) {
   if (dataout.length === 0) throw new Error('Not Data TX')
   var bufs = dataout[0].script.chunks.map(chunk => (chunk.buf) ? chunk.buf : Buffer.alloc(0))
   if (bufs[1].toString() === '19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut') return bufs[2]
+  else if (bufs[2].toString() === '19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut') return bufs[3]
   else {
     // 处理Bcat
     var bParts = bufs.slice(7).map(buf => buf.toString('hex'))
