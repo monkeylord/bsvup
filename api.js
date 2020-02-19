@@ -258,7 +258,7 @@ async function getTX (txid) {
     Extract B/Bcat data from transaction(s)
 */
 async function getData (tx) {
-  var dataout = tx.outputs.filter(out => out.script.isDataOut())
+  var dataout = tx.outputs.filter(out => out.script.isDataOut() || out.script.isSafeDataOut())
   if (dataout.length === 0) throw new Error('Not Data TX')
   var bufs = dataout[0].script.chunks.map(chunk => (chunk.buf) ? chunk.buf : Buffer.alloc(0))
   if (bufs[1].toString() === '19HxigV4QyBv3tHpQVcUEQyq1pzZVdoAut') return bufs[2]
@@ -268,7 +268,7 @@ async function getData (tx) {
     log('处理Bcat中。。。' + bParts, logLevel.VERBOSE)
     var bPartTXs = await Promise.all(bParts.map(bPart => getTX(bPart)))
     log(bPartTXs.map(tx => tx.id), logLevel.VERBOSE)
-    var bPartBufs = bPartTXs.map(tx => tx.outputs.filter(out => out.script.isDataOut())[0].script.chunks[2].buf)
+    var bPartBufs = bPartTXs.map(tx => tx.outputs.filter(out => out.script.isDataOut() || out.script.isSafeDataOut())[0].script.chunks[2].buf)
     log(bPartBufs.map(buf => buf.length), logLevel.VERBOSE)
     var buf = Buffer.concat(bPartBufs)
     log(buf.length, logLevel.VERBOSE)
