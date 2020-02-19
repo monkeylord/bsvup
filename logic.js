@@ -27,8 +27,9 @@ const API = require('./api.js')
 const txutil = require('./txUtil.js')
 
 const CHUNK_SIZE = 64000
-const BASE_TX = 400
-const FEE_PER_KB = 1536
+const MIN_FEE_PER_KB = 250
+const FEE_PER_KB = 500
+const BASE_TX = Math.ceil(170 * FEE_PER_KB / 1000)
 const DUST_LIMIT = 546
 const MAX_OUTPUT = 1000
 const SIZE_PER_OUTPUT = 100
@@ -229,7 +230,7 @@ function uploadFileTask (fileBuf, mime) {
         encoding: 'binary',
         filename: sha1
       },
-      satoshis: fileBuf.length
+      satoshis: Math.ceil((fileBuf.length + mime.length + 'binary'.length + sha1.length + 40) / 1000 * FEE_PER_KB)
     }
     tasks.push(fileTask)
   } else {
@@ -248,7 +249,7 @@ function uploadFileTask (fileBuf, mime) {
         out: {
           data: buf
         },
-        satoshis: buf.length
+        satoshis: Math.ceil((37 + buf.length) / 1000 * FEE_PER_KB)
       }
     })
     // 然后创建Bcat任务
@@ -265,7 +266,7 @@ function uploadFileTask (fileBuf, mime) {
         chunks: null
       },
       deps: partTasks,
-      satoshis: 64 * bufferChunks.length
+      satoshis: Math.ceil(('bsvup'.length + mime.length + 'binary'.length + sha1.length + 33 * bufferChunks.length + 41) / 1000 * FEE_PER_KB)
     }
     partTasks.forEach(task => tasks.push(task))
     tasks.push(bcatTask)
@@ -296,7 +297,7 @@ function uploadDTask (key, depTasks) {
       sequence: new Date().getTime().toString()
     },
     deps: depTasks,
-    satoshis: key.length + 64
+    satoshis: Math.ceil((key.length + 64 + 13 + 40) / 1000 * FEE_PER_KB)
   }
 }
 
@@ -321,7 +322,7 @@ function updateDTask (key, value) {
       type: 'b',
       sequence: new Date().getTime().toString()
     },
-    satoshis: key.length + 64
+    satoshis: Math.ceil((key.length + value.length + 13 + 40) / 1000 * FEE_PER_KB)
   }
 }
 

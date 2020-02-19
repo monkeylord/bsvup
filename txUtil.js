@@ -11,7 +11,8 @@ const bsv = require('bsv')
 const API = require('./api.js')
 
 const CHUNK_SIZE = 64000
-const FEE_PER_KB = 1536
+const MIN_FEE_PER_KB = 250
+const FEE_PER_KB = 500
 const BASE_BPART_SIZE = 250
 const BASE_B_SIZE = 300
 const DUST_LIMIT = 546
@@ -41,7 +42,7 @@ function verifyTX (tx) {
   }
   else {
     API.log(`Verifying ${tx.id}`, API.logLevel.VERBOSE)
-    if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
+    if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2 * MIN_FEE_PER_KB / 1000) {
         API.log(JSON.stringify(tx), API.logLevel.VERBOSE)
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     } else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
