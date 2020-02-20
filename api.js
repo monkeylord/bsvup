@@ -74,9 +74,9 @@ async function broadcastInsight (tx) {
     return tx.id
   }
 
-  return mattercloud.sendRawTx(tx.toString()).then(r => {
+  return mattercloud.sendRawTx(tx.toString()).then(async r => {
     if (r.message && r.message.message) {
-      throw r.message.message.split('\n').slice(0, 3).join('\n')
+      throw r
     }
     if (!r.txid) {
       // 2020-02-04: this appears to indicate mattercloud rate limiting
@@ -87,34 +87,15 @@ async function broadcastInsight (tx) {
     }
     return r.txid
   }).catch(async err => {
-    log(' MatterCloud API return Errors: ', logLevel.INFO)
+    let code
+    if (err.message && err.message.message) {
+      code = err.code
+      err = err.message.message.split('\n').slice(0, 3).join('\n')
+    }
+    log(' MatterCloud API return Errors: ' + code, logLevel.INFO)
     log(err, logLevel.INFO)
     throw [tx.id, 'MatterCloud API return Errors: ' + err]
   })
-
-  /*
-    return new Promise((resolve, reject)=>{
-        insight.broadcast(tx.toString(),(err,res)=>handleBroadcast(err,res))
-        async function handleBroadcast(err,res){
-            if(err){
-                if(err.message && err.message.message)err=err.message.message
-                log(" Insight API return Errors: ", logLevel.INFO)
-                log(err, logLevel.INFO)
-                let txexists = await new Promise(resolve=>{
-                    insight.getTransaction(tx.id,(err,res)=>resolve(!err && res))
-                })
-                if (txexists) {
-                    log(" However, transaction is actually present.", logLevel.INFO)
-                    resolve(txexists.txid)
-                } else {
-                    reject([tx.id,"Insight API return Errors: " + err])
-                }
-            }else{
-                resolve(res)
-            }
-        }
-    })
-    */
 }
 
 /*
