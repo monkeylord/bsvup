@@ -46,7 +46,7 @@ function verifyTX (tx) {
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     } else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)
     else if (tx.toString().length > TX_SIZE_MAX) throw new Error(`${tx.id} Oversized`)
-    else if (!tx.outputs.every(output=>output.satoshis>=546)) throw new Error(`${tx.id} Dust`)
+    else if (!tx.outputs.every(output=>(output.script.isSafeDataOut() || output.satoshis>=546))) throw new Error(`${tx.id} Dust`)
     else return true
   }
   
@@ -231,10 +231,14 @@ function isTXHasInputsInformation(tx){
 function copyInputsInformation(txOrg, txDst){
     var information = {}
     txOrg.inputs.forEach(input => {
-        if(input.output)information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`] = input.output
+        if(input.output)information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`] = input
     })
     txDst.inputs.forEach(input => {
-        if(information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`])input.output = information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`]
+        if(information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`]){
+          input.output = information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`].output
+          input.isFullySigned = information[`${input.prevTxId.toString("hex")}:${input.outputIndex}`].isFullySigned
+        }
+
     })
 }
 

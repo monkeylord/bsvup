@@ -39,6 +39,18 @@ bsvup.api = require('./api.js')
 bsvup.cache = require('./cache.js')
 bsvup.txUtil = require('./txUtil.js')
 
+bsvup.prototype.addData = function(data, dKey){
+  var fileData = {
+    buf: Buffer.from(data),
+    mime: "application/octet-stream",
+    dKey: dKey,
+    bExist: false,
+    dExist: false,
+  }
+  this.fileDatum.push(fileData)
+  return this
+}
+
 bsvup.prototype.addFile = function (file, filename) {
   // TODO process file to file object
   var fileData = null
@@ -127,7 +139,12 @@ bsvup.prototype.buildTXs = async function (isCheckExist) {
   await bsvup.logic.fundTasksEx(this.tasks, this.address, this.utxos, this.signer)
   await bsvup.logic.pendTasks(this.tasks)
 
-  if (!this.verify()) throw new Error('Not all transactions valid.')
+  try{
+    if (!this.verify()) throw new Error('Not all transactions valid.')
+  }catch(err){
+    throw new Error('Not all transactions valid:' + err)
+  }
+  
 
   return this.getTXs()
 }
