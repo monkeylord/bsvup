@@ -36,22 +36,22 @@ const SIZE_PER_OUTPUT = 100
 /*
     Wrap task lifecircle, read file datum from fs, create tasks and make tasks ready to broadcast
 */
-async function prepareUpload (path, privkey, type, subdir) {
+async function prepareUpload (path, privkey, type, subdir, feePerKB) {
   // read files
   var fileDatum = await getFileDatum(path, type, subdir)
   // check existed
   fileDatum = await reduceFileDatum(fileDatum, privkey)
   // create tasks
-  var tasks = await createUploadTasks(fileDatum)
+  var tasks = await createUploadTasks(fileDatum, feePerKB)
   // var tasks = await createUploadTasks(path, privkey, type, subdir)
   if (tasks.length === 0) return tasks
   // fund tasks (Throw insuffient satoshis error if not enough)
   var UTXOs = await API.getUTXOs(privkey.toAddress().toString())
-  await fundTasks(tasks, privkey, UTXOs)
+  await fundTasks(tasks, privkey, UTXOs, feePerKB)
   // pend tasks (known issue: Customized tasks may dead loop for dependencies cannot be solved)
   await pendTasks(tasks)
   // verify tasks (will throw error if failed)
-  verifyTasks(tasks)
+  verifyTasks(tasks, feePerKB)
 
   // ready to be broadcast
   return tasks
@@ -430,7 +430,8 @@ async function fundTasks (tasks, privkey, utxos, feePerKB) {
   })
 
   API.log(`预计总花费 Estimated fee : ${totalSpent} satoshis`, API.logLevel.INFO)
-
+  API.log(`费率 Fee Rate : ${feePerKB/1000} satoshis/byte`, API.logLevel.INFO)
+  
   return tasks
 }
 

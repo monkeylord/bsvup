@@ -47,6 +47,7 @@ program
   .option('-s, --subdirectory [subdirectory]', 'Upload to sub directory onchain  【上传到子目录】', '')
   .option('-n, --newtask', 'abandon unbroadcasted and start new tasks  【放弃未广播内容】')
   .option('-v, --verbose', 'show detailed infomation  【显示详细信息】')
+  .option('-r, --rate [fee rate]', 'Fee per KB  【每千字节费率】', 1000)
 
 // var unBroadcast = []
 if (process.argv.length < 3) {
@@ -129,8 +130,8 @@ async function upload () {
 
   var key = (program.key) ? program.key : await loadKey()
   var path = (program.file) ? program.file : process.cwd()
-
-  var tasks = await logic.prepareUpload(path, key, program.type, program.subdirectory)
+  var feePerKB = Number(program.rate)
+  var tasks = await logic.prepareUpload(path, key, program.type, program.subdirectory, feePerKB)
 
   // Briefing
   console.log('----------------------------------------------------------------------')
