@@ -84,13 +84,18 @@ async function getUTXOs(address){
     Broadcast transaction though insight API
 */
 async function broadcastInsight (tx) {
-  return mattercloud.sendRawTx(tx.toString()).then(r => {
+  return mattercloud.sendRawTx(tx.toString()).then(async r => {
     if (r.message && r.message.message) {
-      throw r.message.message.split('\n').slice(0, 3).join('\n')
+      throw r
     }
     return r.txid
   }).catch(async err => {
-    log(' MatterCloud API return Errors: ', logLevel.INFO)
+    let code
+    if (err.message && err.message.message) {
+      code = err.code
+      err = err.message.message.split('\n').slice(0, 3).join('\n')
+    }
+    log(' MatterCloud API return Errors: ' + code, logLevel.INFO)
     log(err, logLevel.INFO)
     let txexists = await getTX(tx.id)
     if (txexists.txid) {

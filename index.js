@@ -32,6 +32,7 @@ function bsvup (options) {
   this.utxos = []
   this.address = null
   this.signer = null
+  this.feePerKB = 1000
 }
 
 bsvup.logic = require('./logic.js')
@@ -117,7 +118,12 @@ bsvup.prototype.setPrivkey = function (privkey) {
   return this
 }
 
-bsvup.prototype.buildTXs = async function (isCheckExist) {
+bsvup.prototype.setFeePerKB = function(feePerKB) {
+  this.feePerKB = feePerKB
+  return this
+}
+
+bsvup.prototype.buildTasks = async function (isCheckExist) {
   if (!this.signer) throw new Error('No signer or privkey assigned')
   if (!this.address) throw new Error('No address assigned')
   if (this.fileDatum.length === 0) throw new Error('No file provided')
@@ -128,7 +134,22 @@ bsvup.prototype.buildTXs = async function (isCheckExist) {
     this.fileDatum = alreadyReduced.concat(await bsvup.logic.reduceFileDatum(toReduce))
   }
 
-  this.tasks = await bsvup.logic.createUploadTasks(this.fileDatum)
+  this.tasks = await bsvup.logic.createUploadTasks(this.fileDatum, this.feePerKB)
+  return this
+}
+
+bsvup.prototype.estimateFee = async function (isCheckExist){
+  await this.buildTasks(isCheckExist)
+  var DUST_LIMIT = 546
+  var BASE_TX = 250
+  var SIZE_PER_OUTPUT = 100
+  var total = this.tasks.reduce((total, task)=>total + Math.max(DUST_LIMIT, task.satoshis), 0)
+  var mapCost = Math.ceil((BASE_TX + SIZE_PER_OUTPUT * this.tasks.length) * this.feePerKB / 1000)
+  return total + mapCost
+}
+
+bsvup.prototype.buildTXs = async function (isCheckExist) {
+  await this.buildTasks(isCheckExist)
   if(this.utxos.length == 0){
       try{
         this.utxos = await bsvup.api.getUTXOs(this.address)
@@ -136,7 +157,7 @@ bsvup.prototype.buildTXs = async function (isCheckExist) {
         throw new Error(`No utxo found for ${this.address}`)
       }
   }
-  await bsvup.logic.fundTasksEx(this.tasks, this.address, this.utxos, this.signer)
+  await bsvup.logic.fundTasksEx(this.tasks, this.address, this.utxos, this.signer, this.feePerKB)
   await bsvup.logic.pendTasks(this.tasks)
 
   try{
@@ -152,7 +173,7 @@ bsvup.prototype.buildTXs = async function (isCheckExist) {
 bsvup.prototype.verify = function () {
   //var nonMaptasks = this.tasks.filter(task => task.type !== 'Map')
   //return bsvup.logic.verifyTasks(nonMaptasks)
-  return bsvup.logic.verifyTasks(this.tasks)
+  return bsvup.logic.verifyTasks(this.tasks, this.feePerKB)
 }
 
 bsvup.prototype.getTXs = function () {

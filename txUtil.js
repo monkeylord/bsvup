@@ -34,14 +34,15 @@ const TX_SIZE_MAX = 1000000
     Output
     - (boolean) is Transaction valid
 */
-function verifyTX (tx) {
+function verifyTX (tx, feePerKb) {
+  feePerKb = feePerKb || 1000
   if(!isTXHasInputsInformation(tx)){
     API.log(`Cannot verify ${tx.id}: Missing inputs information`, API.logLevel.VERBOSE)
     return true
   }
   else {
     API.log(`Verifying ${tx.id}`, API.logLevel.VERBOSE)
-    if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2) {
+    if (tx.inputAmount - tx.outputAmount < tx.toString().length / 2 * feePerKb / 1000) {
         API.log(JSON.stringify(tx), API.logLevel.VERBOSE)
         throw new Error(`${tx.id}: Insuffient Satoshis`)
     } else if (!tx.isFullySigned()) throw new Error(`${tx.id}: Not fully signed`)

@@ -149,6 +149,7 @@ async function reduceFileDatum (fileDatum, privkey) {
 
     Input
     - File datum
+    - Fee Per KB (default 1000)
     Output
     - Tasks
 
@@ -174,20 +175,21 @@ async function reduceFileDatum (fileDatum, privkey) {
         }
     ]
 */
-async function createUploadTasks (filedatum) {
+async function createUploadTasks (filedatum, feePerKB) {
+  feePerKB = feePerKB || 1000
   API.log(`[+] Creating Tasks`, API.logLevel.INFO)
   var tasks = []
   filedatum.forEach(filedata => {
     var bTasks, dTask
     if (!filedata.bExist) {
       API.log(` - Create B/D tasks for ${filedata.dKey}`, API.logLevel.VERBOSE)
-      bTasks = uploadFileTask(filedata.buf, filedata.mime)
-      dTask = uploadDTask(filedata.dKey, bTasks)
+      bTasks = uploadFileTask(filedata.buf, filedata.mime, feePerKB)
+      dTask = uploadDTask(filedata.dKey, bTasks, feePerKB)
       tasks.push(dTask)
       bTasks.forEach(bTask => tasks.push(bTask))
     } else if (!filedata.dExist) {
       API.log(` - Create D tasks for ${filedata.dKey}`, API.logLevel.VERBOSE)
-      dTask = updateDTask(filedata.dKey, filedata.dValue)
+      dTask = updateDTask(filedata.dKey, filedata.dValue, feePerKB)
       tasks.push(dTask)
     } else {
       API.log(` - Ignore ${filedata.dKey}`, API.logLevel.VERBOSE)
@@ -206,11 +208,13 @@ async function createUploadTasks (filedatum) {
     Input
     - File buffer
     - MIME type
+    - Fee Per KB (default 1000)
 
     Output
     - Tasks
 */
-function uploadFileTask (fileBuf, mime) {
+function uploadFileTask (fileBuf, mime, feePerKB) {
+  feePerKB = feePerKB || 1000
   /*
     var fileBuf = fs.readFileSync(filename)
     var mime = MIME.lookup(filename)
@@ -229,7 +233,7 @@ function uploadFileTask (fileBuf, mime) {
         encoding: 'binary',
         filename: sha1
       },
-      satoshis: fileBuf.length
+      satoshis: Math.ceil((fileBuf.length + mime.length + 'binary'.length + sha1.length + 40) / 1000 * feePerKB)
     }
     tasks.push(fileTask)
   } else {
@@ -248,7 +252,7 @@ function uploadFileTask (fileBuf, mime) {
         out: {
           data: buf
         },
-        satoshis: buf.length
+        satoshis: Math.ceil((37 + buf.length) / 1000 * feePerKB)
       }
     })
     // 然后创建Bcat任务
@@ -265,7 +269,7 @@ function uploadFileTask (fileBuf, mime) {
         chunks: null
       },
       deps: partTasks,
-      satoshis: 64 * bufferChunks.length
+      satoshis: Math.ceil(('bsvup'.length + mime.length + 'binary'.length + sha1.length + 33 * bufferChunks.length + 41) / 1000 * feePerKB)
     }
     partTasks.forEach(task => tasks.push(task))
     tasks.push(bcatTask)
@@ -280,12 +284,14 @@ function uploadFileTask (fileBuf, mime) {
     Input
     - D key
     - Tasks depended
+    - Fee Per KB (default 1000)
 
     Output
     - Task
 */
-function uploadDTask (key, depTasks) {
+function uploadDTask (key, depTasks, feePerKB) {
   // 假设：B TX的依赖在depTasks中第一个
+  feePerKB = feePerKB || 1000
   return {
     type: 'D',
     status: 'prepend',
@@ -296,7 +302,7 @@ function uploadDTask (key, depTasks) {
       sequence: new Date().getTime().toString()
     },
     deps: depTasks,
-    satoshis: key.length + 64
+    satoshis: Math.ceil((key.length + 64 + 13 + 40) / 1000 * feePerKB)
   }
 }
 
@@ -307,11 +313,13 @@ function uploadDTask (key, depTasks) {
     Input
     - D key
     - D value
+    - Fee Per KB (default 1000)
 
     Output
     - Task
 */
-function updateDTask (key, value) {
+function updateDTask (key, value, feePerKB) {
+  feePerKB = feePerKB || 1000
   return {
     type: 'D',
     status: 'ready',
@@ -321,7 +329,7 @@ function updateDTask (key, value) {
       type: 'b',
       sequence: new Date().getTime().toString()
     },
-    satoshis: key.length + 64
+    satoshis: Math.ceil((key.length + value.length + 13 + 40) / 1000 * feePerKB)
   }
 }
 
@@ -333,16 +341,18 @@ function updateDTask (key, value) {
     Input
     - Tasks
     - PrivateKey
+    - Fee Per KB (default 1000)
 
     Output
     - Funded tasks with map tasks added
 */
-async function fundTasks (tasks, privkey, utxos) {
+async function fundTasks (tasks, privkey, utxos, feePerKB) {
+  feePerKB = feePerKB || 1000
   // 给任务添加的UTXO格式中应包含privkey
   API.log(`[+] Funding Tasks`, API.logLevel.INFO)
   // var utxos = await API.getUTXOs(privkey.toAddress().toString())
   // 现在检查是否有足够的Satoshis
-  var satoshisRequired = tasks.reduce((totalRequired, task) => totalRequired += Math.max(DUST_LIMIT, task.satoshis + BASE_TX), 0)
+  var satoshisRequired = tasks.reduce((totalRequired, task) => totalRequired += Math.max(DUST_LIMIT, task.satoshis + Math.ceil(BASE_TX * feePerKB / 1000)), 0)
   var satoshisProvided = utxos.reduce((totalProvided, utxo) => totalProvided += (utxo.amount) ? Math.round(utxo.amount * 1e8) : utxo.satoshis, 0)
   if (satoshisProvided - satoshisRequired - tasks.length * SIZE_PER_OUTPUT < 0) {
     API.log(`当前地址为 ${privkey.toAddress()}`, API.logLevel.WARNING)
@@ -366,7 +376,7 @@ async function fundTasks (tasks, privkey, utxos) {
     myUtxos.forEach(utxo => mapTX.from(utxo))
     currentTasks.forEach(task => {
       // 创建输出
-      mapTX.to(privkey.toAddress(), Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
+      mapTX.to(privkey.toAddress(), Math.max(DUST_LIMIT, task.satoshis + Math.ceil(BASE_TX * feePerKB / 1000)))
       // 用刚创建的输出构建UTXO
       task.utxo = {
         privkey: privkey,
@@ -379,7 +389,7 @@ async function fundTasks (tasks, privkey, utxos) {
     })
     if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000) {
       mapTX.change(privkey.toAddress())
-      mapTX.feePerKb(FEE_PER_KB)
+      mapTX.feePerKb(feePerKB)
     }
     // 签名
     mapTX.sign(privkey)
@@ -431,7 +441,8 @@ async function fundTasks (tasks, privkey, utxos) {
 
     signer is a async function which is expected to take unsigned maptx and return signed maptx.
 */
-async function fundTasksEx (tasks, address, utxos, signer) {
+async function fundTasksEx (tasks, address, utxos, signer, feePerKB) {
+  feePerKB = feePerKB || 1000
   var mapTX = bsv.Transaction()
   var currentTasks = tasks
   //var provided = utxos.reduce((total, utxo) => total += utxo.satoshis, 0)
@@ -439,7 +450,7 @@ async function fundTasksEx (tasks, address, utxos, signer) {
   utxos.forEach(utxo => mapTX.from(utxo))
   currentTasks.forEach(task => {
     // 创建输出
-    mapTX.to(address, Math.max(DUST_LIMIT, task.satoshis + BASE_TX))
+    mapTX.to(address, Math.max(DUST_LIMIT, task.satoshis + Math.ceil(BASE_TX * feePerKB / 1000)))
     // 用刚创建的输出构建UTXO
     task.utxo = {
       signer: signer,
@@ -453,7 +464,7 @@ async function fundTasksEx (tasks, address, utxos, signer) {
   })
   if (mapTX.inputAmount - mapTX.outputAmount - mapTX.outputs.length * 150 - mapTX.inputs.length * 150 > 1000) {
     if(utxos[0].address)mapTX.change(utxos[0].address)
-    mapTX.feePerKb(FEE_PER_KB)
+    mapTX.feePerKb(feePerKB)
   }
   var signedMapTX = bsv.Transaction(await signer(mapTX))
   txutil.copyInputsInformation(mapTX, signedMapTX)
@@ -584,11 +595,11 @@ async function pendTasks (tasks, privkey) {
     Output
     - True if all tasks valid
 */
-function verifyTasks (tasks) {
+function verifyTasks (tasks, feePerKB) {
   API.log(`[+] Verifying Tasks`, API.logLevel.INFO)
   return tasks.every(task => {
     API.log(` - Verifying ${task.type} TX ${task.tx.id}`, API.logLevel.VERBOSE)
-    return txutil.verifyTX(task.tx)
+    return txutil.verifyTX(task.tx, feePerKB)
   })
 }
 
