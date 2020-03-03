@@ -40,10 +40,10 @@ bsvup.api = require('./api.js')
 bsvup.cache = require('./cache.js')
 bsvup.txUtil = require('./txUtil.js')
 
-bsvup.prototype.addData = function(data, dKey){
+bsvup.prototype.addData = function(data, dKey, mime){
   var fileData = {
     buf: Buffer.from(data),
-    mime: "application/octet-stream",
+    mime: mime || "application/octet-stream",
     dKey: dKey,
     bExist: false,
     dExist: false,

@@ -1,0 +1,205 @@
+<html>
+
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <title>BSVUP</title>
+    <link rel="stylesheet" href="https://unpkg.com/jodit@3.2.62/build/jodit.min.css">
+    <script src="https://unpkg.com/bsv@1.0.0/bsv.min.js"></script>
+    <script src="https://unpkg.com/jodit@3.2.62/build/jodit.min.js"></script>
+    <script src="https://www.moneybutton.com/moneybutton.js"></script>
+    <script src="../../bsvup.min.js"></script>
+</head>
+
+<body>
+    <p>
+        This is a demo on how to upload something with bsvup.
+        This demo also shows how to use external signer(third-party wallet, hardware wallet, or in-browser wallet).
+    </p>
+    <p>Instruction:</p>
+    <p>1. Type in a PrivateKey(or generate one), and charge.</p>
+    <p>2. Edit Page as you like.</p>
+    <p>3. Click commit to build TXs and broadcast</p>
+    <p>Note: Key saved in local storage is not safe and not recommanded, only for demostration.</p>
+    <div id="box" style="border-style:double;">
+        <a>Page:</a><a id="address"></a>/<input type="text" id="path" onchange="" value="index.html" >
+        <input type="button" id="load" value="Load" onclick="load()">
+        <input type="button" id="View" value="View" onclick="view()">
+        <div id="editor">
+        </div>
+        <input type="button" id="Commit" value="Commit" onclick="commit()">
+        <input type="button" id="View" value="EstimateFee" onclick="estimate()">
+    </div>
+    <div id="key" style="border-style:double;">
+        <p>Key & Signer</p>
+        <p>
+            Identity Private Key:
+            <input type="text" id="privkey" onchange="updateKeyInfo()" oninput="updateKeyInfo()">
+            <button id="load" onclick="loadKey()">Load</button>
+            <button id="save" onclick="saveKey()">Save</button>
+            <button id="gen" onclick="genKey()">Generate</button>
+        </p>
+        <div ref="moneybutton" id='MB'></div>
+        <p id="keyInfo"></p>
+    </div>
+
+
+    <div style="border-style:double;">
+        <p>Log:</p>
+        <div id="log"></div>
+    </div>
+    <script>
+        const editor = new Jodit('#editor', {
+            // iframe: true,
+            // theme: 'dark',
+            toolbarButtonSize: 'large',
+            tabIndex: 0,
+            // textIcons: true,
+        });
+
+        //console.log hook
+        (function logHook() {
+            var log = document.getElementById("log")
+            var original_log = console.log
+            console.log = function (...args) {
+                original_log(...args)
+                log.innerText += args + "\r\n"
+                //document.write(args)
+            }
+        })()
+        bsvup.api.setLogLevel(bsvup.api.logLevel.INFO)
+
+        function getKey() {
+            var privkey
+            if (bsv.PrivateKey.isValid(document.getElementById("privkey").value)) {
+                privkey = bsv.PrivateKey(document.getElementById("privkey").value)
+            } else if (bsv.PrivateKey.isValid(localStorage.bsvup_privkey)) {
+                privkey = bsv.PrivateKey(localStorage.bsvup_privkey)
+                console.log(`Your Stored Private Key is ${privkey.toString()}\r\nAddress:${privkey.toAddress()}`)
+            } else {
+                privkey = bsv.PrivateKey()
+                console.log(`Your Generated Private Key is ${privkey.toString()}\r\nAddress:${privkey.toAddress()}`)
+                localStorage.bsvup_privkey = privkey.toString()
+            }
+            return privkey
+        }
+
+        function loadKey(){
+            document.getElementById("privkey").value = localStorage.bsvup_privkey
+            updateKeyInfo()
+        }
+        function saveKey(){
+            localStorage.bsvup_privkey = document.getElementById("privkey").value
+        }
+        function genKey(){
+            document.getElementById("privkey").value = bsv.PrivateKey().toString()
+            saveKey()
+            updateKeyInfo()
+        }
+
+        function getPage(){
+            return document.getElementById("path").value
+        }
+        function getSigner() {
+            return (TX) => TX.sign(getKey())
+        }
+
+        function getAddress() {
+            return getKey().toAddress().toString()
+        }
+
+        async function getUtxos() {
+            return bsvup.api.getUTXOs(getAddress())
+        }
+
+        async function updateKeyInfo() {
+            if (document.getElementById("privkey").value.length>30 && bsv.PrivateKey.isValid(document.getElementById("privkey").value)) {
+                var key = getKey()
+                var MBDiv = document.getElementById("MB")
+                moneyButton.render(MBDiv, {
+                    to: getAddress(),
+                    amount: 3000,
+                    currency: "BSV",
+                    label: "charge",
+                    clientIdentifier: "8628f951336df6f4254647916d5ef64f",
+                    type: "buy",
+                    editable: true,
+                    onPayment: function(arg){updateKeyInfo()},
+                    onError: function (arg) { console.log('onError', arg) }
+                })
+                document.getElementById("address").text = getAddress()
+                document.getElementById("keyInfo").innerText = ""
+                var utxos = await getUtxos()
+                document.getElementById("keyInfo").innerText = `Address: ${getAddress()}   Satoshis: ${utxos.reduce((total, utxo) => total + utxo.satoshis, 0)}`
+            }
+        }
+
+        async function broadcast_longMempool(TXs) {
+            for (var i = 0; i < TXs.length; i++) {
+                console.log(`Broadcasting ${i+1}/${TXs.length} TXs`)
+                var success = false
+                var tlmc = false
+                while (!success) {
+                    try {
+                        await bsvup.api.broadcast(TXs[i])
+                        success = true
+                    } catch ([txid, err]) {
+                        console.log(`${txid} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
+                        console.log(err.split('\n')[0], logLevel.INFO)
+                        console.log(err.split('\n')[2], logLevel.INFO)
+                        if (err.indexOf('too-long-mempool-chain') !== -1) {
+                            tlmc = true
+                            console.log("Waiting 60s...")
+                        }
+                    }
+                    if (tlmc) await sleep(60000)
+                }
+            }
+        }
+
+        function sleep(ms) {
+            return new Promise((resolve, reject) => {
+                setTimeout(resolve, ms)
+            })
+        }
+
+    </script>
+
+    <script>
+        function view() {
+            window.open(`https://bico.media/${getAddress()}/${getPage()}`)
+        }
+        function load(){
+            fetch(`https://bico.media/${getAddress()}/${getPage()}`)
+                .then(r=>(r.status==200)?r.text():"")
+                .then(html=>editor.value=html)
+        }
+
+        async function commit() {
+            var key = getKey()
+            var value = editor.value
+            var builder = new bsvup().addData(value, getPage(), "text/html")
+                .setAddress(getAddress())
+                .setSigner(getSigner())
+            var fee = await builder.estimateFee()
+            try {
+                if (confirm(`Estimate Cost: ${fee} satoshis, proceed?`)) {
+                    var TXs = await builder.buildTXs()
+                    if (confirm(`${TXs.length} TXs built, broadcast?`)) {
+                        await broadcast_longMempool(TXs)
+                    }
+                }
+            } catch (err) { alert(err) }
+        }
+        async function estimate() {
+            var key = getKey()
+            var value = editor.value
+            var builder = new bsvup().addData(value, getPage())
+                .setAddress(getAddress())
+                .setSigner(getSigner())
+            alert(await builder.estimateFee())
+        }
+    </script>
+
+    <body>
+
+</html>
