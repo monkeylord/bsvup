@@ -223,7 +223,7 @@ async function transfer () {
 
 async function loadKey () {
   var password
-  if (program.password) {
+  if (program.password !== undefined) {
     password = program.password
   } else {
     var answers = await inquirer.prompt([ {
@@ -238,7 +238,7 @@ async function loadKey () {
 }
 async function saveKey (privkey) {
   var password
-  if (program.password) {
+  if (program.password !== undefined) {
     password = program.password
   } else {
     var answers = await inquirer.prompt([ {
