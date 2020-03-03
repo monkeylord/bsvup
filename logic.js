@@ -27,8 +27,7 @@ const API = require('./api.js')
 const txutil = require('./txUtil.js')
 
 const CHUNK_SIZE = 64000
-const BASE_TX = 400
-const FEE_PER_KB = 1536
+const BASE_TX = 178
 const DUST_LIMIT = 546
 const MAX_OUTPUT = 1000
 const SIZE_PER_OUTPUT = 100

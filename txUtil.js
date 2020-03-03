@@ -11,7 +11,6 @@ const bsv = require('bsv')
 const API = require('./api.js')
 
 const CHUNK_SIZE = 64000
-const FEE_PER_KB = 1536
 const BASE_BPART_SIZE = 250
 const BASE_B_SIZE = 300
 const DUST_LIMIT = 546
