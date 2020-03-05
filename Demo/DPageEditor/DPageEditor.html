@@ -24,6 +24,7 @@
         <a>Page:</a><a id="address"></a>/<input type="text" id="path" onchange="" value="index.html" >
         <input type="button" id="load" value="Load" onclick="load()">
         <input type="button" id="View" value="View" onclick="view()">
+        <a>MIME:</a><input type="text" id="mime" onchange="" value="text/html" >
         <div id="editor">
         </div>
         <input type="button" id="Commit" value="Commit" onclick="commit()">
@@ -99,6 +100,15 @@
         function getPage(){
             return document.getElementById("path").value
         }
+
+        function getMIME(){
+            return document.getElementById("mime").value
+        }
+
+        function setMIME(mime){
+            document.getElementById("mime").value = mime
+        }
+
         function getSigner() {
             return (TX) => TX.sign(getKey())
         }
@@ -170,14 +180,21 @@
         }
         function load(){
             fetch(`https://bico.media/${getAddress()}/${getPage()}`)
-                .then(r=>(r.status==200)?r.text():"")
+                .then(r=>{
+                    if(r.status==200){
+                        var mime = r.headers.get("content-type").split(";")[0]
+                        setMIME(mime)
+                        editor.setMode((mime=="text/html")?1:2)
+                        return r.text()
+                    }else return ""
+                })
                 .then(html=>editor.value=html)
         }
 
         async function commit() {
             var key = getKey()
             var value = editor.value
-            var builder = new bsvup().addData(value, getPage(), "text/html")
+            var builder = new bsvup().addData(value, getPage(), getMIME())
                 .setAddress(getAddress())
                 .setSigner(getSigner())
             var fee = await builder.estimateFee()
@@ -193,7 +210,7 @@
         async function estimate() {
             var key = getKey()
             var value = editor.value
-            var builder = new bsvup().addData(value, getPage())
+            var builder = new bsvup().addData(value, getPage(), getMIME())
                 .setAddress(getAddress())
                 .setSigner(getSigner())
             alert(await builder.estimateFee())
