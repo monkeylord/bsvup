@@ -92,13 +92,12 @@ async function getFileDatum (path, dirHandle, subdir) {
 
     var filename = (subdir + '/' + relativePath).replace(/\/\/+/g, '/')
     if (filename.startsWith('/')) filename = filename.slice(1)
-    var dKey = encodeURI(filename)
-    API.log(`   D key: ${dKey}`, API.logLevel.VERBOSE)
+    API.log(`   D key: ${encodeURI(filename)}`, API.logLevel.VERBOSE)
 
     fileDatum.push({
       buf: buf,
       mime: mime,
-      dKey: dKey
+      dKey: filename
     })
   }
   return fileDatum
