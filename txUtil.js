@@ -11,7 +11,6 @@ const bsv = require('bsv')
 const API = require('./api.js')
 
 const CHUNK_SIZE = 64000
-const FEE_PER_KB = 1536
 const BASE_BPART_SIZE = 250
 const BASE_B_SIZE = 300
 const DUST_LIMIT = 546
@@ -70,7 +69,7 @@ function verifyTX (tx, feePerKb) {
     - (BSV Transaction) Map TX
     - (UTXO with target key Array) UTXOs
 */
-function prepareUtxos (targetUtxos, originalUtxos, privKey) {
+function prepareUtxos (targetUtxos, originalUtxos, privKey, feePerKb) {
   // 先不进行优化了，以后再说
   var tx = bsv.Transaction()
   originalUtxos.forEach(outxo => tx.from(outxo))
@@ -88,7 +87,7 @@ function prepareUtxos (targetUtxos, originalUtxos, privKey) {
   if (tx.inputAmount - tx.outputAmount < 0) throw new Error('Insuffient satoshis.')
   if (tx.inputAmount - tx.outputAmount - tx.toString().length / 2 > 1000) {
     tx.change(privKey.toAddress())
-    tx.feePerKb(FEE_PER_KB)
+    tx.feePerKb(feePerKb)
   }
   tx.sign(privKey)
   utxos.forEach(utxo => utxo.txid = utxo.tx.id)
@@ -264,7 +263,6 @@ module.exports = {
   },
   parameters: {
     CHUNK_SIZE: CHUNK_SIZE,
-    FEE_PER_KB: FEE_PER_KB,
     BASE_BPART_SIZE: BASE_BPART_SIZE,
     BASE_B_SIZE: BASE_B_SIZE,
     DUST_LIMIT: DUST_LIMIT,
