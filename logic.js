@@ -39,7 +39,7 @@ async function prepareUpload (path, privkey, type, subdir, feePerKB) {
   // read files
   var fileDatum = await getFileDatum(path, type, subdir)
   // check existed
-  fileDatum = await reduceFileDatum(fileDatum, privkey)
+  fileDatum = await reduceFileDatum(fileDatum, privkey.toAddress())
   // create tasks
   var tasks = await createUploadTasks(fileDatum, feePerKB)
   // var tasks = await createUploadTasks(path, privkey, type, subdir)
@@ -119,7 +119,7 @@ async function getFileDatum (path, dirHandle, subdir) {
         dKey: "foo/file.txt",
     }]
 */
-async function reduceFileDatum (fileDatum, privkey) {
+async function reduceFileDatum (fileDatum, address) {
   API.log(`[+] Checking Exist Record`, API.logLevel.INFO)
   for (var fileData of fileDatum) {
     API.log(` - Checking ${fileData.dKey}`, API.logLevel.INFO)
@@ -130,7 +130,7 @@ async function reduceFileDatum (fileDatum, privkey) {
       // fileData.buf = undefined    // Release Buffer
       fileData.dExist = false
       fileData.dValue = fileTX.id
-      if (await API.findD(fileData.dKey, privkey.toAddress().toString(), fileTX.id)) {
+      if (await API.findD(fileData.dKey, address.toString(), fileTX.id)) {
         fileData.dExist = true
         API.log(`   D Record found on chain.`, API.logLevel.INFO)
       }

@@ -131,7 +131,7 @@ bsvup.prototype.buildTasks = async function (isCheckExist) {
   if (isCheckExist) {
     var alreadyReduced = this.fileDatum.filter(file => file.bExist || file.dExist)
     var toReduce = this.fileDatum.filter(file => (!file.bExist) & (!file.dExist))
-    this.fileDatum = alreadyReduced.concat(await bsvup.logic.reduceFileDatum(toReduce))
+    this.fileDatum = alreadyReduced.concat(await bsvup.logic.reduceFileDatum(toReduce, this.address))
   }
 
   this.tasks = await bsvup.logic.createUploadTasks(this.fileDatum, this.feePerKB)

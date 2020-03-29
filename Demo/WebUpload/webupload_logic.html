@@ -19,8 +19,10 @@
     </p>
     <p>
         Action:
-        <input type="button" id="estimateFee" value="estimateFee" onclick="estimateFee()">
-        <input type="button" id="buildTXs" value="buildTXs" onclick="buildTXs()">
+        <input type="button" id="createTasks" value="createTasks" onclick="createTasks()">
+        <input type="button" id="fundTasks" value="fundTasks" onclick="fundTasks()" disabled=true>
+        <input type="button" id="pendTasks" value="pendTasks" onclick="pendTasks()" disabled=true>
+        <input type="button" id="broadcast" value="broadcast" onclick="broadcast()" disabled=true>
     </p>
     <div id="log"></div>
     <script>
@@ -52,51 +54,77 @@
             return privkey
         }
 
-        async function getFiles(){
-            var files = []
+        var tasks = []
+        //var privkey = null
+        async function createTasks() {
             var list = document.getElementById("uploadfile").files
             var subpath = document.getElementById("subpath").value
             subpath = (subpath) ? subpath + "/" : ""
-            
+            var privkey = getKey()
+            var files = []
             for (i = 0; i < list.length; i++) {
                 files.push(list[i])
             }
-            return await Promise.all(files.map(async file => {
+            var datum = await Promise.all(files.map(async file => {
                 return {
                     dKey: subpath + file.name,
-                    mime: file.type || "application/octet-stream",
+                    mime: file.type,
                     buf: bsv.deps.Buffer(await file.arrayBuffer())
                 }
             }))
+            var reducedDatum = await bsvup.logic.reduceFileDatum(datum, privkey)
+            tasks = await bsvup.logic.createUploadTasks(reducedDatum)
+            console.log("Done!")
+            document.getElementById("fundTasks").disabled = false
+            return tasks
         }
 
-        async function estimateFee() {
-            var builder = new bsvup()
-            var key = getKey()
-            builder.setPrivkey(getKey())
-            var files = await getFiles()
-            files.forEach(file=>builder.addFile(file))
-            alert(await builder.estimateFee(true))
-        }
-
-        async function buildTXs() {
-            var builder = new bsvup()
-            var key = getKey()
-            builder.setPrivkey(getKey())
-            var files = await getFiles()
-            files.forEach(file=>{
-                builder.addFile(file)
-                console.log(`Preparing ${bsv.PrivateKey(key).toAddress()}/${file.dKey}`)
-            })
-            var fee = await builder.estimateFee(true)
+        async function fundTasks() {
+            var privkey = getKey()
             try {
-                if (confirm(`Estimate Cost: ${fee} satoshis, proceed?`)) {
-                    var TXs = await builder.buildTXs(true)
-                    if (confirm(`${TXs.length} TXs built, broadcast?`)) {
-                        await broadcast_longMempool(TXs)
-                    }
+                var utxos = await bsvup.api.getUTXOs(privkey.toAddress())
+                tasks = await bsvup.logic.fundTasks(tasks, privkey, utxos)
+                console.log("Done!")
+            } catch (err) {
+                console.log(err)
+                console.log("Failed")
+            }
+            document.getElementById("pendTasks").disabled = false
+            return tasks
+        }
+
+        async function pendTasks() {
+            try {
+                tasks = await bsvup.logic.pendTasks(tasks)
+                tasks.filter(task => task.type == "D").forEach(task => {
+                    console.log(`[File Record] Path: https://bico.media/${task.utxo.privkey.toAddress()}/${task.out.key} , TXID: ${task.out.value}`)
+                })
+                console.log("Done!")
+            } catch (err) {
+                console.log(err)
+                console.log("Failed")
+            }
+            document.getElementById("broadcast").disabled = false
+            return tasks
+        }
+
+        async function broadcast() {
+            await bsvup.logic.verifyTasks(tasks)
+            var txs = bsvup.logic.getTXs(tasks)
+            await broadcast_longMempool(txs)
+            /*
+            var unbroadcasted = txs
+            while(unbroadcasted.length>0){
+                unbroadcasted = await bsvup.api.tryBroadcastAll(txs)
+                if(unbroadcasted>0){
+                    console.log("Wait 120s and retry")
+                    await new Promise((res,rej)=>{
+                        setTimeout(res,120000)
+                    })
                 }
-            } catch (err) { alert(err) }
+            }
+            */
+            console.log("All Done!")
         }
 
         async function broadcast_longMempool(TXs) {
