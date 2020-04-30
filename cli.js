@@ -26,6 +26,11 @@ program
   .action(upload)
 
 program
+  .command('reupload')
+  .description('synchronise transaction cache with network, to resolve errors')
+  .action(reupload)
+
+program
   .command('charge')
   .description('展示地址二维码，向该地址转账以为上传提供资金')
   .action(charge)
@@ -62,7 +67,7 @@ if (process.argv.length < 3) {
   console.log('   bsvup transfer -a 19vuHzifeejLBqWhGnQ1zmw1TwYzoXcaUM -p mypassword')
 }
 // 因为这个判断在parse之前，不能从program里判断，只有自己判断了
-if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length === 0 && fs.existsSync('./.bsv/unbroadcasted.tx.json')) {
+if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length === 0 && Cache.haveUnbroadcast()) {
   inquirer.prompt([{
     type: 'confirm',
     name: 'continue',
@@ -76,7 +81,7 @@ if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length ===
       broadcast()
     } else {
       // 清除未广播的TX
-      if (fs.existsSync('./.bsv/unbroadcasted.tx.json')) fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+      Cache.wipeUnbroadcast()
       program.parse(process.argv)
     }
   })
@@ -177,6 +182,17 @@ async function upload () {
     console.log('开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...')
     broadcast()
   }
+}
+
+async function reupload () {
+  const transaction_identifiers = Cache.loadTXList()
+  const unbroadcast = Cache.loadUnbroadcast()
+  for (let identifier of transaction_identifiers) {
+    unbroadcast.push(bsv.Transaction(Cache.loadTX(identifier)).toJSON())
+  }
+  Cache.saveUnbroadcast(unbroadcast)
+
+  broadcast()
 }
 
 async function charge () {

@@ -64,6 +64,10 @@ function loadFileRecord (sha1) {
   }
 }
 
+function loadTXList () {
+  return fs.readdirSync('./.bsv/tx/')
+}
+
 function saveTX (tx) {
   fs.writeFileSync(`./.bsv/tx/${tx.id}`, tx.toString())
 }
@@ -81,14 +85,29 @@ function saveUnbroadcast (unBroadcast) {
     fs.writeFileSync('./.bsv/unbroadcasted.tx.json', JSON.stringify(unBroadcast))
     return unBroadcast
   } else {
-    if (fs.existsSync('./.bsv/unbroadcasted.tx.json'))fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+    wipeUnbroadcast()
     return []
   }
 }
 
+function haveUnbroadcast () {
+  return fs.existsSync('./.bsv/unbroadcasted.tx.json')
+}
+
 function loadUnbroadcast () {
-  var unBroadcast = JSON.parse(fs.readFileSync('./.bsv/unbroadcasted.tx.json')).map(tx => bsv.Transaction(tx))
+  var unBroadcast
+  if (haveUnbroadcast()) {
+    unBroadcast = JSON.parse(fs.readFileSync('./.bsv/unbroadcasted.tx.json')).map(tx => bsv.Transaction(tx))
+  } else {
+    unBroadcast = []
+  }
   return unBroadcast
+}
+
+function wipeUnbroadcast () {
+  if (haveUnbroadcast()) {
+    fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+  }
 }
 
 module.exports = {
@@ -100,6 +119,9 @@ module.exports = {
   loadFileRecord: loadFileRecord,
   saveTX: saveTX,
   loadTX: loadTX,
+  loadTXList: loadTXList,
   saveUnbroadcast: saveUnbroadcast,
-  loadUnbroadcast: loadUnbroadcast
+  haveUnbroadcast: haveUnbroadcast,
+  loadUnbroadcast: loadUnbroadcast,
+  wipeUnbroadcast: wipeUnbroadcast
 }
