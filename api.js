@@ -121,12 +121,14 @@ async function tryBroadcastAll (TXs) {
   var toBroadcast = TXs || Cache.loadUnbroadcast()
   var unBroadcast = []
   var needToWait = false
+  var successPossible = false
   for (let tx of toBroadcast) {
     try {
       if (needToWait) {
         unBroadcast.push(tx)
       } else {
         await broadcast(tx, unBroadcast)
+        successPossible = true
       }
     } catch ([txid, err]) {
       log(`${txid} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
@@ -134,10 +136,19 @@ async function tryBroadcastAll (TXs) {
       log(err.split('\n')[2], logLevel.INFO)
       if (err.indexOf('too-long-mempool-chain') !== -1) {
         needToWait = true
+        successPossible = true
+      } else if (err.indexOf('Missing inputs') === -1) {
+        successPossible = true
       }
     }
   }
-  return Cache.saveUnbroadcast(unBroadcast)
+  Cache.saveUnbroadcast(unBroadcast)
+  if (! successPossible && unBroadcast.length) {
+    log('ERROR: All transactions failed from missing inputs.  Was wallet in use elsewhere?', logLevel.ERROR)
+    Cache.abandonUnbroadcast()
+    unBroadcast = []
+  }
+  return unBroadcast
 }
 
 /*

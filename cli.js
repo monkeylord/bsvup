@@ -81,7 +81,7 @@ if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length ===
       broadcast()
     } else {
       // 清除未广播的TX
-      Cache.wipeUnbroadcast()
+      Cache.abandonUnbroadcast()
       program.parse(process.argv)
     }
   })

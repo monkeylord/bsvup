@@ -65,7 +65,7 @@ function loadFileRecord (sha1) {
 }
 
 function loadTXList () {
-  return fs.readdirSync('./.bsv/tx/')
+  return fs.readdirSync('./.bsv/tx/').filter(identifier => identifier.length === 64)
 }
 
 function saveTX (tx) {
@@ -78,6 +78,12 @@ function loadTX (txid) {
   } catch (err) {
     return null
   }
+}
+
+function wipeTX (txid) {
+  try {
+    fs.unlinkFileSync(`./.bsv/tx/${txid}`)
+  } catch (err) { }
 }
 
 function saveUnbroadcast (unBroadcast) {
@@ -110,6 +116,17 @@ function wipeUnbroadcast () {
   }
 }
 
+function abandonUnbroadcast () {
+  if (haveUnbroadcast()) {
+    for (let transaction of loadUnbroadcast()) {
+      try {
+        fs.renameSync(`./.bsv/tx/${transaction.id}`, `./.bsv/tx/abandoned-${transaction.id}`)
+      } catch (err) { }
+    }
+    fs.renameSync('./.bsv/unbroadcasted.tx.json', `./.bsv/abandoned-${Date.now()}.tx.json`)
+  }
+}
+
 module.exports = {
   initCache: init,
   isKeyExist: isKeyExist,
@@ -119,9 +136,11 @@ module.exports = {
   loadFileRecord: loadFileRecord,
   saveTX: saveTX,
   loadTX: loadTX,
+  wipeTX: wipeTX,
   loadTXList: loadTXList,
   saveUnbroadcast: saveUnbroadcast,
   haveUnbroadcast: haveUnbroadcast,
   loadUnbroadcast: loadUnbroadcast,
-  wipeUnbroadcast: wipeUnbroadcast
+  wipeUnbroadcast: wipeUnbroadcast,
+  abandonUnbroadcast: abandonUnbroadcast
 }
