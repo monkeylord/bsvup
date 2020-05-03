@@ -175,7 +175,7 @@ async function upload () {
   if (toBroadcast) {
     Cache.saveUnbroadcast(unBroadcast)
     var timenow = new Date().getTime()
-    fs.writeFileSync(`bsvup.${timenow}.tasks`, JSON.stringify(tasks))
+    //fs.writeFileSync(`bsvup.${timenow}.tasks`, JSON.stringify(tasks))
     console.log(`Tasks is saved at bsvup.${timenow}.tasks`)
     fs.writeFileSync(`bsvup.${timenow}.txs`, JSON.stringify(unBroadcast.map(tx => tx.toString())))
     console.log(`TX(s) for the tasks is saved at bsvup.${timenow}.txs`)
@@ -185,12 +185,14 @@ async function upload () {
 }
 
 async function reupload () {
-  const transaction_identifiers = Cache.loadTXList()
-  const unbroadcast = Cache.loadUnbroadcast()
+  let transaction_identifiers = Cache.loadTXList()
+  let unbroadcast = Cache.loadUnbroadcast()
   for (let identifier of transaction_identifiers) {
     unbroadcast.push(bsv.Transaction(Cache.loadTX(identifier)).toJSON())
   }
+  transaction_identifiers = null
   Cache.saveUnbroadcast(unbroadcast)
+  unbroadcast = null
 
   broadcast()
 }

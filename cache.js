@@ -88,7 +88,15 @@ function wipeTX (txid) {
 
 function saveUnbroadcast (unBroadcast) {
   if (unBroadcast.length > 0) {
-    fs.writeFileSync('./.bsv/unbroadcasted.tx.json', JSON.stringify(unBroadcast))
+    const filename = './.bsv/unbroadcasted.tx.json'
+    fs.writeFileSync(filename, '[')
+    let first = true
+    for (let transaction of unBroadcast) {
+      if (! first) { fs.appendFileSync(filename, ',') }
+      fs.appendFileSync(filename, JSON.stringify(transaction))
+      first = false
+    }
+    fs.appendFileSync(filename, ']')
     return unBroadcast
   } else {
     wipeUnbroadcast()
