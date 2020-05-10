@@ -98,7 +98,7 @@ function loadTX (txid, subdir = 'tx') {
 
 function wipeTX (txid, subdir = 'tx') {
   try {
-    fs.unlinkFileSync(`./.bsv/${subdir}/${txid}`)
+    fs.unlinkSync(`./.bsv/${subdir}/${txid}`)
   } catch (err) { }
 }
 
