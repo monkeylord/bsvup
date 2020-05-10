@@ -186,7 +186,7 @@ async function upload () {
 async function reupload () {
   let transaction_identifiers = Cache.loadTXList()
   for (let identifier of transaction_identifiers) {
-    Cache.saveTX(identifier, 'unbroadcasted')
+    Cache.saveTX(Cache.loadTX(identifier), 'unbroadcasted')
   }
 
   broadcast()
