@@ -83,7 +83,8 @@ function queryTx (id) {
         'tx.h': id
       },
       'project': {
-        'tx.h': 1
+        'tx.h': 1,
+        'blk.h': 1
       }
     }
   }

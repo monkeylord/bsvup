@@ -67,7 +67,7 @@ if (process.argv.length < 3) {
   console.log('   bsvup transfer -a 19vuHzifeejLBqWhGnQ1zmw1TwYzoXcaUM -p mypassword')
 }
 // 因为这个判断在parse之前，不能从program里判断，只有自己判断了
-if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length === 0 && Cache.haveUnbroadcast()) {
+if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask' || arg === 'reupload')).length === 0 && Cache.haveUnbroadcast()) {
   inquirer.prompt([{
     type: 'confirm',
     name: 'continue',
@@ -75,7 +75,6 @@ if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length ===
     default: true
   }]).then((answers) => {
     if (answers.continue) {
-      // unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx => bsv.Transaction(tx))
       console.log(`${Cache.loadUnbroadcast().length} TX(s) loaded.`)
       console.log('开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...')
       broadcast()
@@ -120,8 +119,8 @@ async function init () {
 async function broadcast () {
   let remaining = await api.tryBroadcastAll()
   if (remaining.length > 0) {
-    console.log(`${remaining.length}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
-    console.log(`Not All Transaction Broadcasted, ${remaining.length} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
+    console.log(`${remaining.length}个TX广播失败，已保存至'./.bsv/unbroadcasted/'，120秒后重新尝试广播。`)
+    console.log(`Not All Transaction Broadcasted, ${remaining.length} transaction(s) is saved to './.bsv/unbroadcasted/' and will be rebroadcasted in 120s.`)
     setTimeout(broadcast, 120000)
   } else {
     console.log('所有TX已广播！')
@@ -186,13 +185,9 @@ async function upload () {
 
 async function reupload () {
   let transaction_identifiers = Cache.loadTXList()
-  let unbroadcast = Cache.loadUnbroadcast()
   for (let identifier of transaction_identifiers) {
-    unbroadcast.push(bsv.Transaction(Cache.loadTX(identifier)).toJSON())
+    Cache.saveTX(identifier, 'unbroadcasted')
   }
-  transaction_identifiers = null
-  Cache.saveUnbroadcast(unbroadcast)
-  unbroadcast = null
 
   broadcast()
 }

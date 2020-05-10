@@ -68,12 +68,6 @@ async function getUTXOs (address) {
     Broadcast transaction though insight API
 */
 async function broadcastInsight (tx) {
-  let txexists = await BitDB.findTx(tx.id)
-  if (txexists.length) {
-    log(' Transaction is actually present.', logLevel.INFO)
-    return tx.id
-  }
-
   return mattercloud.sendRawTx(tx.toString()).then(async r => {
     if (r.message && r.message.message) {
       throw r
@@ -89,9 +83,14 @@ async function broadcastInsight (tx) {
   }).catch(async err => {
     let code
     if (err.message && err.message.message) {
-      code = err.code
-      err = err.message.message.split('\n').slice(0, 3).join('\n')
+      err.message = err.message.message
     }
+    if (err.code == 500 && err.message.indexOf('Transaction already in the mempool') !== -1) {
+      log(` Mattercloud reports already in mempool: ${tx.id}`, logLevel.INFO)
+      return tx.id
+    }
+    code = err.code
+    err = err.message.split('\n').slice(0, 3).join('\n')
     log(' MatterCloud API return Errors: ' + code, logLevel.INFO)
     log(err, logLevel.INFO)
     throw [tx.id, 'MatterCloud API return Errors: ' + err]
@@ -101,14 +100,14 @@ async function broadcastInsight (tx) {
 /*
     Wrapped broadcast transaction, push unbroadcast transaction into unbroadcast array provided.
 */
-async function broadcast (tx, unBroadcast) {
+async function broadcast (tx) {
   try {
     const res = await broadcastInsight(tx)
     Cache.saveTX(tx)
     log(`Broadcasted ${res}`, logLevel.INFO)
     return res
   } catch (e) {
-    if (unBroadcast && Array.isArray(unBroadcast))unBroadcast.push(tx)
+    Cache.saveTX(tx, 'unbroadcasted')
     throw e
   }
 }
@@ -118,37 +117,52 @@ async function broadcast (tx, unBroadcast) {
     If TXs is null, load transactions from cache.
 */
 async function tryBroadcastAll (TXs) {
-  var toBroadcast = TXs || Cache.loadUnbroadcast()
-  var unBroadcast = []
+  if (TXs) {
+    for (let transaction of TXs) {
+      Cache.saveTX(transaction, 'unbroadcasted')
+    }
+  }
+  var toBroadcast = Cache.loadTXList('unbroadcasted')
   var needToWait = false
   var successPossible = false
-  for (let tx of toBroadcast) {
+  for (let identifier of toBroadcast) {
     try {
-      if (needToWait) {
-        unBroadcast.push(tx)
-      } else {
-        await broadcast(tx, unBroadcast)
-        successPossible = true
+      let txexists = await BitDB.findTx(identifier)
+      if (txexists.length) {
+        if (txexists[0].blk) {
+          log(`Confirmed ${identifier} in block ${txexists[0].blk.h}`, logLevel.INFO)
+          let transaction = Cache.loadTX(identifier, 'unbroadcasted')
+          Cache.saveTX(transaction)
+          Cache.wipeTX(identifier, 'unbroadcasted')
+        } else {
+          log(`Still waiting in network mempool: ${identifier}`, logLevel.INFO)
+        }
+      } else if (!needToWait) {
+        await broadcast(Cache.loadTX(identifier, 'unbroadcasted'))
       }
-    } catch ([txid, err]) {
-      log(`${txid} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
-      log(err.split('\n')[0], logLevel.INFO)
-      log(err.split('\n')[2], logLevel.INFO)
-      if (err.indexOf('too-long-mempool-chain') !== -1) {
-        needToWait = true
+      successPossible = true
+    } catch (errors) {
+      log(`${identifier} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
+      if (errors[0] != identifier || !errors[1]) {
+        throw errors
+      }
+      log(errors[1].split('\n')[0], logLevel.INFO)
+      log(errors[1].split('\n')[2], logLevel.INFO)
+      if (errors[1].indexOf('Missing inputs') !== -1) {
+        // missing inputs, success might not be possible if double-spend
+      } else {
         successPossible = true
-      } else if (err.indexOf('Missing inputs') === -1) {
-        successPossible = true
+        if (errors[1].indexOf('too-long-mempool-chain') !== -1) {
+          needToWait = true
+        }
       }
     }
   }
-  Cache.saveUnbroadcast(unBroadcast)
-  if (! successPossible && unBroadcast.length) {
+  if (!successPossible && Cache.haveUnbroadcast()) {
     log('ERROR: All transactions failed from missing inputs.  Was wallet in use elsewhere?', logLevel.ERROR)
     Cache.abandonUnbroadcast()
-    unBroadcast = []
   }
-  return unBroadcast
+  return Cache.loadUnbroadcast()
 }
 
 /*

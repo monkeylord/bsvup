@@ -26,6 +26,9 @@ function init () {
   if (!fs.existsSync('./.bsv/info')) {
     fs.mkdirSync('./.bsv/info')
   }
+  if (!fs.existsSync('./.bsv/unbroadcasted')) {
+    fs.mkdirSync('./.bsv/unbroadcasted')
+  }
 }
 
 function isKeyExist () {
@@ -64,39 +67,46 @@ function loadFileRecord (sha1) {
   }
 }
 
-function loadTXList () {
-  return fs.readdirSync('./.bsv/tx/').filter(identifier => identifier.length === 64)
+function loadTXList (subdir = 'tx') {
+  if (!fs.existsSync(`./.bsv/${subdir}`)) {
+    return []
+  }
+  let identifiers = fs.readdirSync(`./.bsv/${subdir}/`).filter(identifer => identifer.length === 64)
+  // return transaction ids in order of creation
+  identifiers = identifiers.map(identifier => ({
+    identifier: identifier,
+    time: fs.statSync(`./.bsv/${subdir}/${identifier}`).birthtimeMs
+  }))
+  identifiers.sort((a,b) => a.time - b.time)
+  return identifiers.map(identifier => identifier.identifier)
 }
 
-function saveTX (tx) {
-  fs.writeFileSync(`./.bsv/tx/${tx.id}`, tx.toString())
+function saveTX (tx, subdir = 'tx') {
+  if (!fs.existsSync(`./.bsv/${subdir}`)) {
+    fs.mkdirSync(`./.bsv/${subdir}`)
+  }
+  fs.writeFileSync(`./.bsv/${subdir}/${tx.id}`, tx.toString())
 }
 
-function loadTX (txid) {
+function loadTX (txid, subdir = 'tx') {
   try {
-    return bsv.Transaction(fs.readFileSync(`./.bsv/tx/${txid}`).toString())
+    return bsv.Transaction(fs.readFileSync(`./.bsv/${subdir}/${txid}`).toString())
   } catch (err) {
     return null
   }
 }
 
-function wipeTX (txid) {
+function wipeTX (txid, subdir = 'tx') {
   try {
-    fs.unlinkFileSync(`./.bsv/tx/${txid}`)
+    fs.unlinkFileSync(`./.bsv/${subdir}/${txid}`)
   } catch (err) { }
 }
 
 function saveUnbroadcast (unBroadcast) {
   if (unBroadcast.length > 0) {
-    const filename = './.bsv/unbroadcasted.tx.json'
-    fs.writeFileSync(filename, '[')
-    let first = true
     for (let transaction of unBroadcast) {
-      if (! first) { fs.appendFileSync(filename, ',') }
-      fs.appendFileSync(filename, JSON.stringify(transaction))
-      first = false
+      saveTX(transaction, 'unbroadcasted')
     }
-    fs.appendFileSync(filename, ']')
     return unBroadcast
   } else {
     wipeUnbroadcast()
@@ -105,33 +115,73 @@ function saveUnbroadcast (unBroadcast) {
 }
 
 function haveUnbroadcast () {
-  return fs.existsSync('./.bsv/unbroadcasted.tx.json')
+  if (fs.existsSync('./.bsv/unbroadcasted.tx.json')) {
+    // convert legacy json file
+    for (let transaction of JSON.parse(fs.readFileSync('./.bsv/unbroadcasted.tx.json'))) {
+      saveTX(bsv.Transaction(transaction), 'unbroadcasted')
+    }
+    fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+    return true
+  }
+  if (loadTXList('unbroadcasted').length > 0) {
+    return true
+  }
 }
 
 function loadUnbroadcast () {
-  var unBroadcast
+  // function has been changed to handle very large transaction sets using an iterable
+  // proposal: migrating away from it, instead using loadTXList directly
   if (haveUnbroadcast()) {
-    unBroadcast = JSON.parse(fs.readFileSync('./.bsv/unbroadcasted.tx.json')).map(tx => bsv.Transaction(tx))
+    const transactions = loadTXList('unbroadcasted')
+    const iterable = { }
+
+    // emulates some behavior of an array
+    iterable.length = transactions.length
+    iterable.push = function (transaction) {
+      saveTX(transaction, 'unbroadcasted')
+      transactions.push(transaction.id)
+      iterable.length = transactions.length
+    }
+
+    let index = 0
+    // provides support for for..of
+    iterable[Symbol.iterator] = function () {
+      return {
+        next: function() {
+          const iteration = {}
+          //console.log(`nextUnbroadcast: ${index} / ${transactions.length}`)
+          if (index < transactions.length) {
+            //console.log(`  hash: ${transactions[index]}`)
+            iteration.index = index
+            iteration.value = loadTX(transactions[index ++], 'unbroadcasted')
+            iteration.done = false
+          } else {
+            iteration.done = true
+          }
+          return iteration
+        }
+      }
+    }
+    return iterable
   } else {
-    unBroadcast = []
+    return []
   }
-  return unBroadcast
 }
 
 function wipeUnbroadcast () {
   if (haveUnbroadcast()) {
-    fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+    for (let transaction of loadUnbroadcast()) {
+      wipeTX(transaction, 'unbroadcasted')
+    }
   }
 }
 
 function abandonUnbroadcast () {
   if (haveUnbroadcast()) {
     for (let transaction of loadUnbroadcast()) {
-      try {
-        fs.renameSync(`./.bsv/tx/${transaction.id}`, `./.bsv/tx/abandoned-${transaction.id}`)
-      } catch (err) { }
+      fs.saveTX(`transactions-abandoned-${Date.now()}`)
+      fs.wipeTX(transaction.id)
     }
-    fs.renameSync('./.bsv/unbroadcasted.tx.json', `./.bsv/abandoned-${Date.now()}.tx.json`)
   }
 }
 
