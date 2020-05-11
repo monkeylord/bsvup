@@ -82,6 +82,7 @@ function loadTXList (subdir = 'tx') {
 }
 
 function saveTX (tx, subdir = 'tx') {
+  if (!tx.id) { throw 'cannot save a tx id: need a full tx' }
   if (!fs.existsSync(`./.bsv/${subdir}`)) {
     fs.mkdirSync(`./.bsv/${subdir}`)
   }
@@ -179,8 +180,8 @@ function wipeUnbroadcast () {
 function abandonUnbroadcast () {
   if (haveUnbroadcast()) {
     for (let transaction of loadUnbroadcast()) {
-      fs.saveTX(`transactions-abandoned-${Date.now()}`)
-      fs.wipeTX(transaction.id)
+      saveTX(`transactions-abandoned-${Date.now()}`)
+      wipeTX(transaction.id)
     }
   }
 }
