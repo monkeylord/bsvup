@@ -26,6 +26,9 @@ function init () {
   if (!fs.existsSync('./.bsv/info')) {
     fs.mkdirSync('./.bsv/info')
   }
+  if (!fs.existsSync('./.bsv/unbroadcasted')) {
+    fs.mkdirSync('./.bsv/unbroadcasted')
+  }
 }
 
 function isKeyExist () {
@@ -64,31 +67,123 @@ function loadFileRecord (sha1) {
   }
 }
 
-function saveTX (tx) {
-  fs.writeFileSync(`./.bsv/tx/${tx.id}`, tx.toString())
+function loadTXList (subdir = 'tx') {
+  if (!fs.existsSync(`./.bsv/${subdir}`)) {
+    return []
+  }
+  let identifiers = fs.readdirSync(`./.bsv/${subdir}/`).filter(identifer => identifer.length === 64)
+  // return transaction ids in order of creation
+  identifiers = identifiers.map(identifier => ({
+    identifier: identifier,
+    time: fs.statSync(`./.bsv/${subdir}/${identifier}`).birthtimeMs
+  }))
+  identifiers.sort((a,b) => a.time - b.time)
+  return identifiers.map(identifier => identifier.identifier)
 }
 
-function loadTX (txid) {
+function saveTX (tx, subdir = 'tx') {
+  if (!tx.id) { throw 'cannot save a tx id: need a full tx' }
+  if (!fs.existsSync(`./.bsv/${subdir}`)) {
+    fs.mkdirSync(`./.bsv/${subdir}`)
+  }
+  fs.writeFileSync(`./.bsv/${subdir}/${tx.id}`, tx.toString())
+}
+
+function loadTX (txid, subdir = 'tx') {
   try {
-    return bsv.Transaction(fs.readFileSync(`./.bsv/tx/${txid}`).toString())
+    return bsv.Transaction(fs.readFileSync(`./.bsv/${subdir}/${txid}`).toString())
   } catch (err) {
     return null
   }
 }
 
+function wipeTX (txid, subdir = 'tx') {
+  try {
+    fs.unlinkSync(`./.bsv/${subdir}/${txid}`)
+  } catch (err) { }
+}
+
 function saveUnbroadcast (unBroadcast) {
   if (unBroadcast.length > 0) {
-    fs.writeFileSync('./.bsv/unbroadcasted.tx.json', JSON.stringify(unBroadcast))
+    for (let transaction of unBroadcast) {
+      saveTX(transaction, 'unbroadcasted')
+    }
     return unBroadcast
   } else {
-    if (fs.existsSync('./.bsv/unbroadcasted.tx.json'))fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+    wipeUnbroadcast()
     return []
   }
 }
 
+function haveUnbroadcast () {
+  if (fs.existsSync('./.bsv/unbroadcasted.tx.json')) {
+    // convert legacy json file
+    for (let transaction of JSON.parse(fs.readFileSync('./.bsv/unbroadcasted.tx.json'))) {
+      saveTX(bsv.Transaction(transaction), 'unbroadcasted')
+    }
+    fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+    return true
+  }
+  if (loadTXList('unbroadcasted').length > 0) {
+    return true
+  }
+}
+
 function loadUnbroadcast () {
-  var unBroadcast = JSON.parse(fs.readFileSync('./.bsv/unbroadcasted.tx.json')).map(tx => bsv.Transaction(tx))
-  return unBroadcast
+  // function has been changed to handle very large transaction sets using an iterable
+  // proposal: migrating away from it, instead using loadTXList directly
+  if (haveUnbroadcast()) {
+    const transactions = loadTXList('unbroadcasted')
+    const iterable = { }
+
+    // emulates some behavior of an array
+    iterable.length = transactions.length
+    iterable.push = function (transaction) {
+      saveTX(transaction, 'unbroadcasted')
+      transactions.push(transaction.id)
+      iterable.length = transactions.length
+    }
+
+    let index = 0
+    // provides support for for..of
+    iterable[Symbol.iterator] = function () {
+      return {
+        next: function() {
+          const iteration = {}
+          //console.log(`nextUnbroadcast: ${index} / ${transactions.length}`)
+          if (index < transactions.length) {
+            //console.log(`  hash: ${transactions[index]}`)
+            iteration.index = index
+            iteration.value = loadTX(transactions[index ++], 'unbroadcasted')
+            iteration.done = false
+          } else {
+            iteration.done = true
+          }
+          return iteration
+        }
+      }
+    }
+    return iterable
+  } else {
+    return []
+  }
+}
+
+function wipeUnbroadcast () {
+  if (haveUnbroadcast()) {
+    for (let transaction of loadUnbroadcast()) {
+      wipeTX(transaction, 'unbroadcasted')
+    }
+  }
+}
+
+function abandonUnbroadcast () {
+  if (haveUnbroadcast()) {
+    for (let transaction of loadUnbroadcast()) {
+      saveTX(`transactions-abandoned-${Date.now()}`)
+      wipeTX(transaction.id)
+    }
+  }
 }
 
 module.exports = {
@@ -100,6 +195,11 @@ module.exports = {
   loadFileRecord: loadFileRecord,
   saveTX: saveTX,
   loadTX: loadTX,
+  wipeTX: wipeTX,
+  loadTXList: loadTXList,
   saveUnbroadcast: saveUnbroadcast,
-  loadUnbroadcast: loadUnbroadcast
+  haveUnbroadcast: haveUnbroadcast,
+  loadUnbroadcast: loadUnbroadcast,
+  wipeUnbroadcast: wipeUnbroadcast,
+  abandonUnbroadcast: abandonUnbroadcast
 }

@@ -26,6 +26,11 @@ program
   .action(upload)
 
 program
+  .command('reupload')
+  .description('synchronise transaction cache with network, to resolve errors')
+  .action(reupload)
+
+program
   .command('charge')
   .description('展示地址二维码，向该地址转账以为上传提供资金')
   .action(charge)
@@ -62,7 +67,7 @@ if (process.argv.length < 3) {
   console.log('   bsvup transfer -a 19vuHzifeejLBqWhGnQ1zmw1TwYzoXcaUM -p mypassword')
 }
 // 因为这个判断在parse之前，不能从program里判断，只有自己判断了
-if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length === 0 && fs.existsSync('./.bsv/unbroadcasted.tx.json')) {
+if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask' || arg === 'reupload')).length === 0 && Cache.haveUnbroadcast()) {
   inquirer.prompt([{
     type: 'confirm',
     name: 'continue',
@@ -70,13 +75,12 @@ if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask')).length ===
     default: true
   }]).then((answers) => {
     if (answers.continue) {
-      // unBroadcast = JSON.parse(fs.readFileSync("./.bsv/unbroadcasted.tx.json")).map(tx => bsv.Transaction(tx))
       console.log(`${Cache.loadUnbroadcast().length} TX(s) loaded.`)
       console.log('开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...')
       broadcast()
     } else {
       // 清除未广播的TX
-      if (fs.existsSync('./.bsv/unbroadcasted.tx.json')) fs.unlinkSync('./.bsv/unbroadcasted.tx.json')
+      Cache.abandonUnbroadcast()
       program.parse(process.argv)
     }
   })
@@ -115,8 +119,8 @@ async function init () {
 async function broadcast () {
   let remaining = await api.tryBroadcastAll()
   if (remaining.length > 0) {
-    console.log(`${remaining.length}个TX广播失败，已保存至'./.bsv/unbroadcasted.tx.json'，120秒后重新尝试广播。`)
-    console.log(`Not All Transaction Broadcasted, ${remaining.length} transaction(s) is saved to './.bsv/unbroadcasted.tx.json' and will be rebroadcasted in 120s.`)
+    console.log(`${remaining.length}个TX广播失败，已保存至'./.bsv/unbroadcasted/'，120秒后重新尝试广播。`)
+    console.log(`Not All Transaction Broadcasted, ${remaining.length} transaction(s) is saved to './.bsv/unbroadcasted/' and will be rebroadcasted in 120s.`)
     setTimeout(broadcast, 120000)
   } else {
     console.log('所有TX已广播！')
@@ -170,13 +174,22 @@ async function upload () {
   if (toBroadcast) {
     Cache.saveUnbroadcast(unBroadcast)
     var timenow = new Date().getTime()
-    fs.writeFileSync(`bsvup.${timenow}.tasks`, JSON.stringify(tasks))
+    //fs.writeFileSync(`bsvup.${timenow}.tasks`, JSON.stringify(tasks))
     console.log(`Tasks is saved at bsvup.${timenow}.tasks`)
     fs.writeFileSync(`bsvup.${timenow}.txs`, JSON.stringify(unBroadcast.map(tx => tx.toString())))
     console.log(`TX(s) for the tasks is saved at bsvup.${timenow}.txs`)
     console.log('开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...')
     broadcast()
   }
+}
+
+async function reupload () {
+  let transaction_identifiers = Cache.loadTXList()
+  for (let identifier of transaction_identifiers) {
+    Cache.saveTX(Cache.loadTX(identifier), 'unbroadcasted')
+  }
+
+  broadcast()
 }
 
 async function charge () {
