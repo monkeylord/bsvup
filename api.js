@@ -9,7 +9,7 @@
 */
 const bsv = require('bsv')
 const fs = require('fs')
-const BitDB = require('./bitdb.js')
+const Backends = require('./backends.js')
 const MimeLookup = require('mime-lookup')
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require('crypto')
@@ -127,7 +127,7 @@ async function tryBroadcastAll (TXs) {
   var successPossible = false
   for (let identifier of toBroadcast) {
     try {
-      let txexists = await BitDB.findTx(identifier)
+      let txexists = await Backends.findTx(identifier)
       if (txexists.length) {
         if (txexists[0].blk) {
           log(`Confirmed ${identifier} in block ${txexists[0].blk.h}`, logLevel.INFO)
@@ -175,8 +175,8 @@ async function findExist (buf, mime) {
   if (global.quick) return null
   var records = Cache.loadFileRecord(sha1)
   if (!Array.isArray(records) || records.length === 0) {
-    log(' - 向BitDB搜索已存在的文件记录 Querying BitDB', logLevel.VERBOSE)
-    records = await BitDB.findExist(buf)
+    log(' - 向BitBus搜索已存在的文件记录 Querying BitBus', logLevel.VERBOSE)
+    records = await Backends.findMightExist(buf)
     records = records.filter(record => record.contenttype === mime)
   }
   if (records.length === 0) return null
@@ -203,17 +203,17 @@ async function findExist (buf, mime) {
 }
 
 /*
-    BitDB queries are expensive at time
+    BitBus queries are expensive at time
     We should do a all in one query
 */
 var dRecords = null
 async function findD (key, address, value) {
   if (global.quick) return null
-  // var dRecords = await BitDB.findD(key, address)
+  // var dRecords = await Backends.findD(key, address)
   if (!dRecords) {
     log(`查询${address}下所有D记录中...`, logLevel.VERBOSE)
-    log(`Query all D records on ${address} from BitDB...`, logLevel.VERBOSE)
-    dRecords = await BitDB.findD(null, address)
+    log(`Query all D records on ${address} from BitBus...`, logLevel.VERBOSE)
+    dRecords = await Backends.findD(null, address)
   }
   var keyDRecords = dRecords.filter(record => record.key === key)
   var dRecord = (keyDRecords.length > 0) ? keyDRecords[0] : null
