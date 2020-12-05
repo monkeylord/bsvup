@@ -169,7 +169,7 @@ async function tryBroadcastAll (TXs) {
     Find exist bsvup B/Bcat record on blockchain.
     We use sha1 as file name.
 */
-async function findMightExist (buf, mime) {
+async function findExist (buf, mime) {
   var sha1 = crypto.createHash('sha1').update(buf).digest('hex')
   log(sha1, logLevel.VERBOSE)
   if (global.quick) return null
@@ -365,7 +365,7 @@ function log (log, level) {
 module.exports = {
   transfer: transfer,
   findD: findD,
-  findMightExist: findMightExist,
+  findExist: findExist,
   tryBroadcastAll: tryBroadcastAll,
   broadcast: broadcast,
   getUTXOs: getUTXOs,
