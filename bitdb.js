@@ -1,3 +1,7 @@
+// bitdb has been deprecated by unwriter and generally doesn't respond
+// to api queries anymore.  there may be other bitdb endpoints run by
+// community members; I don't know. - xloem, 2020
+
 const bsv = require('bsv')
 const bitdb = 'https://genesis.bitdb.network/q/1FnauZ9aUH2Bex6JzdcV4eNX7oLSSEbxtN/'
 const BitDBKey = ['159bcdKY4spcahzfTZhBbFBXrTWpoh4rd3']
