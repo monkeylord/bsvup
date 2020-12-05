@@ -181,22 +181,24 @@ async function findExist (buf, mime) {
   }
   if (records.length === 0) return null
   var txs = await Promise.all(records.map(record => getTX(record.txid)))
-  var matchTX = await Promise.race(txs.map(tx => {
+  var matchTXs = await Promise.all(txs.map(tx => {
     return new Promise(async (resolve, reject) => {
       var databuf = await getData(tx).catch(err => {
         log(` - TX Data not properly resolved. Error: ${err}`, logLevel.VERBOSE)
         return Buffer.alloc(0)
       })
-      if (databuf.equals(buf)) resolve(tx)
-      else reject(new Error('Not Matched'))
+      if (databuf.equals(buf)) {
+        resolve(tx)
+      } else {
+        log(` - Found TX Data that does not match.`, logLevel.VERBOSE)
+        resolve(null)
+      }
     })
-  })).catch(err => {
-    log(` - TX Data not properly resolved. Error: ${err}`, logLevel.VERBOSE)
-    return null
-  })
-  if (matchTX) {
+  }))
+  matchTXs = matchTXs.filter(matchTX => matchTX !== null)
+  if (matchTXs.length) {
     Cache.saveFileRecord(sha1, records)
-    return matchTX
+    return matchTXs
   } else {
     return null
   }
