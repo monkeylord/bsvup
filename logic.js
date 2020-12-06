@@ -123,16 +123,16 @@ async function reduceFileDatum (fileDatum, address) {
   API.log(`[+] Checking Exist Record`, API.logLevel.INFO)
   for (var fileData of fileDatum) {
     API.log(` - Checking ${fileData.dKey}`, API.logLevel.INFO)
-    var fileTX = await API.findMightExist(fileData.buf, fileData.mime)
+    var fileTX = await API.findExist(fileData.buf, fileData.mime)
     if (fileTX) {
-      API.log(`   Data hash found on chain, assuming present.`, API.logLevel.INFO)
+      API.log(`   Data found on chain.`, API.logLevel.INFO)
       fileData.bExist = true
       // fileData.buf = undefined    // Release Buffer
       fileData.dExist = false
       fileData.dValue = fileTX.id
       if (await API.findD(fileData.dKey, address.toString(), fileTX.id)) {
         fileData.dExist = true
-        API.log(`   D Record pointing to hash found on chain.`, API.logLevel.INFO)
+        API.log(`   D Record found on chain.`, API.logLevel.INFO)
       }
     } else {
       fileData.bExist = false
