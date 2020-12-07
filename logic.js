@@ -29,8 +29,9 @@ const txutil = require('./txUtil.js')
 const CHUNK_SIZE = txutil.parameters.CHUNK_SIZE
 const DUST_LIMIT = txutil.parameters.DUST_LIMIT
 const BASE_TX = 178
-const MAX_OUTPUT = 1000
-const SIZE_PER_OUTPUT = 100
+const MAX_OUTPUT_INPUT_BYTES = 100000 // estimated
+const SIZE_PER_OUTPUT = 42 // estimated
+const SIZE_PER_INPUT = 156 // estimated
 
 /*
     Wrap task lifecircle, read file datum from fs, create tasks and make tasks ready to broadcast
@@ -366,12 +367,15 @@ async function fundTasks (tasks, privkey, utxos, feePerKB) {
   var mapTasks = []
   while (mytasks.length > 0) {
     // To avoid create oversized TX
-    var currentTasks = mytasks.slice(0, MAX_OUTPUT)
-    mytasks = mytasks.slice(MAX_OUTPUT)
+    numOutputs = Math.max(Math.floor((MAX_OUTPUT_INPUT_BYTES - myUtxos.length * SIZE_PER_INPUT) / SIZE_PER_OUTPUT), 1)
+    var currentTasks = mytasks.slice(0,  numOutputs)
+    mytasks = mytasks.slice(numOutputs)
     // 创建MapTX
     var mapTX = bsv.Transaction()
     // 按理说可以先算出所需要的Satoshis，然后只要能够满足需要的部分UTXO即可，不需要全部，但是这个优化以后再说
-    myUtxos.forEach(utxo => mapTX.from(utxo))
+    while (myUtxos.length > 0 && numOutputs * SIZE_PER_OUTPUT + (mapTX.inputs.length + 1) * SIZE_PER_INPUT <= MAX_OUTPUT_INPUT_BYTES) {
+        mapTX.from(myUtxos.pop())
+    }
     currentTasks.forEach(task => {
       // 创建输出
       mapTX.to(privkey.toAddress(), Math.max(DUST_LIMIT, task.satoshis + Math.ceil(BASE_TX * feePerKB / 1000)))
@@ -407,17 +411,16 @@ async function fundTasks (tasks, privkey, utxos, feePerKB) {
     })
     // ChangeOutput as new UTXO
     if (mapTX.getChangeOutput()) {
-      myUtxos = [{
+      myUtxos.push({
         txid: mapTX.id,
         vout: mapTX.outputs.length - 1,
         address: mapTX.outputs[mapTX.outputs.length - 1].script.toAddress().toString(),
         script: mapTX.outputs[mapTX.outputs.length - 1].script.toHex(),
         satoshis: mapTX.outputs[mapTX.outputs.length - 1].satoshis
-      }]
+      })
     } else {
       // This means insuffient Satoshis
       API.log('Insuffient Satoshis when funding tasks', API.logLevel.VERBOSE)
-      myUtxos = []
     }
   }
 
