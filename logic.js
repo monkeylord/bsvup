@@ -124,7 +124,7 @@ async function reduceFileDatum (fileDatum, address) {
   API.log(`[+] Checking Exist Record`, API.logLevel.INFO)
   for (var fileData of fileDatum) {
     API.log(` - Checking ${fileData.dKey}`, API.logLevel.INFO)
-    var fileTXs = await API.findExist(fileData.buf, fileData.mime)
+    var fileTXs = await API.findExists(fileData.buf, fileData.mime)
     if (fileTXs) {
       API.log(`   Data found on chain.`, API.logLevel.INFO)
       fileData.bExist = true

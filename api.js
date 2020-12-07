@@ -170,6 +170,12 @@ async function tryBroadcastAll (TXs) {
     We use sha1 as file name.
 */
 async function findExist (buf, mime) {
+  var exists = await findExists(buf, mime)
+  if(Array.isArray(exists) && exists.length>0)return exists[0]
+  else return null
+}
+
+async function findExists (buf, mime) {
   var sha1 = crypto.createHash('sha1').update(buf).digest('hex')
   log(sha1, logLevel.VERBOSE)
   if (global.quick) return null
@@ -368,6 +374,7 @@ module.exports = {
   transfer: transfer,
   findD: findD,
   findExist: findExist,
+  findExists: findExists,
   tryBroadcastAll: tryBroadcastAll,
   broadcast: broadcast,
   getUTXOs: getUTXOs,

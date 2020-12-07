@@ -1,5 +1,6 @@
 const bsv = require('bsv')
-const BitDB = require('./bitdb.js')
+//const BitDB = require('./bitdb.js')
+const Backends = require('./backends.js')
 /*
 var bitindex = require('bitindex-sdk').instance({
   api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
@@ -174,36 +175,44 @@ async function tryBroadcastAll (TXs) {
     We use sha1 as file name.
 */
 async function findExist (buf, mime) {
+  var exists = await findExists(buf, mime)
+  if(Array.isArray(exists) && exists.length>0)return exists[0]
+  else return null
+}
+
+async function findExists (buf, mime) {
   var sha1 = bsv.crypto.Hash.sha1(buf).toString('hex')
   log(sha1, logLevel.VERBOSE)
   if (global.quick) return null
   var records = []
   if (!Array.isArray(records) || records.length === 0) {
-    log(' - 向BitDB搜索已存在的文件记录 Querying BitDB', logLevel.VERBOSE)
-    records = await BitDB.findExist(buf)
+    log(' - 向BitBus搜索已存在的文件记录 Querying BitBus', logLevel.VERBOSE)
+    records = await Backends.findMightExist(buf)
     records = records.filter(record => record.contenttype === mime)
   }
   if (records.length === 0) {
-    log(` - BitDB returned no matched`, logLevel.VERBOSE)
+    log(` - BitBus returned no matched`, logLevel.VERBOSE)
     return null
   }
-  log(` - BitDB returned ${records.length} matched`, logLevel.VERBOSE)
+  log(` - BitBus returned ${records.length} matched`, logLevel.VERBOSE)
   var txs = await Promise.all(records.map(record => getTX(record.txid)))
-  var matchTX = await Promise.race(txs.map(tx => {
+  var matchTXs = await Promise.all(txs.map(tx => {
     return new Promise(async (resolve, reject) => {
       var databuf = await getData(tx).catch(err => {
         log(` - TX Data not properly resolved. Error: ${err}`, logLevel.VERBOSE)
         return Buffer.alloc(0)
       })
-      if (databuf.equals(buf)) resolve(tx)
-      else reject(new Error('Not Matched'))
+      if (databuf.equals(buf)) {
+        resolve(tx)
+      } else {
+        log(` - Found TX Data that does not match.`, logLevel.VERBOSE)
+        resolve(null)
+      }
     })
-  })).catch(err => {
-    log(` - TX Data not properly resolved. Error: ${err}`, logLevel.VERBOSE)
-    return null
-  })
-  if (matchTX) {
-    return matchTX
+  }))
+  matchTXs = matchTXs.filter(matchTX => matchTX !== null)
+  if (matchTXs.length) {
+    return matchTXs
   } else {
     return null
   }
@@ -219,8 +228,8 @@ async function findD (key, address, value) {
   // var dRecords = await BitDB.findD(key, address)
   if (!dRecords) {
     log(`查询${address}下所有D记录中...`, logLevel.INFO)
-    log(`Query all D records on ${address} from BitDB...`, logLevel.INFO)
-    dRecords = await BitDB.findD(null, address)
+    log(`Query all D records on ${address} from BitBus...`, logLevel.INFO)
+    dRecords = await Backends.findD(null, address)
   }
   var keyDRecords = dRecords.filter(record => record.key === key)
   var dRecord = (keyDRecords.length > 0) ? keyDRecords[0] : null
@@ -323,6 +332,7 @@ module.exports = {
   transfer: transfer,
   findD: findD,
   findExist: findExist,
+  findExists: findExists,
   tryBroadcastAll: tryBroadcastAll,
   broadcast: broadcast,
   getUTXOs: getUTXOs,
