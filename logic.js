@@ -73,7 +73,7 @@ async function getFileDatum (path, dirHandle, subdir) {
   API.log(`    Target sub directory: ${subdir}`, API.logLevel.VERBOSE)
 
   var fileDatum = []
-  var files = API.isDirectory(path) ? API.readFiles(path) : [path.split('/').reverse()[0]]
+  var files = API.isDirectory(path) ? API.readFiles(path) : [path]
   var basePath = API.isDirectory(path) ? path : path.split('/').reverse().slice(1).reverse().join('/')
 
   API.log(`    Base path: ${basePath}`, API.logLevel.VERBOSE)
