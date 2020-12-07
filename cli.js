@@ -81,11 +81,11 @@ if (process.argv.filter(arg => (arg === '-n' || arg === '--newtask' || arg === '
     } else {
       // 清除未广播的TX
       Cache.abandonUnbroadcast()
-      program.parse(process.argv)
+      program.parseAsync(process.argv).catch(e=>{process.exitCode=1; throw e;})
     }
   })
 } else {
-  program.parse(process.argv)
+  program.parseAsync(process.argv).catch(e=>{process.exitCode=1; throw e;})
 }
 
 async function init () {
