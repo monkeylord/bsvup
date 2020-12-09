@@ -143,7 +143,8 @@ async function upload () {
   console.log('----------------------------------------------------------------------')
   console.log('新上传的内容可通过如下地址访问 Content is accessible from:')
   tasks.filter(task => task.type === 'D').forEach(task => {
-    console.log(` https://bico.media/${key.toAddress().toString()}/${task.out.key}`)
+    console.log(` D://${key.toAddress().toString()}/${task.out.key}`)
+    console.log(`  to https://bico.media/${task.out.value}`)
   })
   console.log('----------------------------------------------------------------------')
   console.log('生成了如下 TX(s): ')
