@@ -8,9 +8,9 @@
 const mattercloud = require('mattercloudjs').instance({
   api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
 })
+const electrumx = require('./electrumx.js')
 const bsv = require('bsv')
 const bitbus = require('./bitbus.js')
-const axios = require('axios')
 
 async function get_bitquery (query)
 {
@@ -19,21 +19,29 @@ async function get_bitquery (query)
 
 async function get_rawtx (identifier)
 {
-  // TODO STUB: return transaction from mattercloud or whatsonchain or anything
+  return electrumx.get_rawtx(identifier)
 }
 
 async function get_utxos (address)
 {
-  // TODO STUB: return transactions, coins spendable by address
+  return electrumx.get_utxos(address)
+}
+
+async function get_history (address)
+{
+  return electrumx.get_history(address)
 }
 
 async function broadcast (transaction)
 {
-  // TODO STUB: broadcast transaction to network, return identifier of result
+  console.log('backends broadcast')
+  return electrumx.broadcast(transaction)
 }
 
 // Functions that were originally in bitdb.js
 async function findTx (id) {
+  return electrumx.findTx(id)
+  /*
   var queryTx = {
     'v': 3,
     'q': {
@@ -48,6 +56,7 @@ async function findTx (id) {
   }
   var r = await get_bitquery(queryTx)
   return r
+  */
 }
 async function findMightExist (buffer) {
   // findExist is renamed to findMightExist because the sha1 could mismatch the data
