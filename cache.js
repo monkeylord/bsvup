@@ -179,9 +179,10 @@ function wipeUnbroadcast () {
 
 function abandonUnbroadcast () {
   if (haveUnbroadcast()) {
+    subdir = `transactions-abandoned-${Date.now()}`
     for (let transaction of loadUnbroadcast()) {
-      saveTX(`transactions-abandoned-${Date.now()}`)
-      wipeTX(transaction.id)
+      saveTX(transaction, subdir)
+      wipeTX(transaction.id, 'unbroadcasted')
     }
   }
 }
