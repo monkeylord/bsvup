@@ -182,7 +182,7 @@ function abandonUnbroadcast () {
     subdir = `transactions-abandoned-${Date.now()}`
     for (let transaction of loadUnbroadcast()) {
       saveTX(transaction, subdir)
-      wipeTX(transaction.id)
+      wipeTX(transaction.id, 'unbroadcasted')
     }
   }
 }
