@@ -43,7 +43,7 @@ async function getUTXOs (address) {
 */
 async function broadcast (tx) {
   try {
-    const res = await Backends.broadcast(tx)
+    const res = await Backends.broadcast(tx.toString())
     Cache.saveTX(tx)
     log(`Broadcasted ${res}`, logLevel.INFO)
     return res
