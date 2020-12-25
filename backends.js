@@ -5,10 +5,9 @@
     - broadcast transactions
 */
 
-const mattercloud = require('mattercloudjs').instance({
-  api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
-})
+const mattercloud = require('./mattercloud.js')
 const electrumx = require('./electrumx.js')
+const bsvrpc = require('./bsvrpc.js')
 const bsv = require('bsv')
 const bitbus = require('./bitbus.js')
 
@@ -35,6 +34,7 @@ async function get_history (address)
 async function broadcast (transaction)
 {
   console.log('backends broadcast')
+  //return bsvrpc.broadcast(transaction)
   return electrumx.broadcast(transaction)
 }
 
