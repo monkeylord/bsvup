@@ -1,21 +1,37 @@
 const electrum = require('@codewarriorr/electrum-client-js')
 const bsv = require('bsv')
 
-var _client = null;
+var _client = null
 
 var _servers = [
-  ['sv.usebsv.com', 50002],
-  ['electrum.privateservers.network', 50011],
-  ['sv2.satoshi.io', 50002],
-  ['sv.satoshi.io', 50002],
-  ['satoshi.vision.cash', 50002]
+//  'tcp://localhost:5001',
+  'ssl://sv.usebsv.com:50002',
+  'ssl://electrum.privateservers.network:50011',
+  'ssl://sv2.satoshi.io:50002',
+  'ssl://sv.satoshi.io:50002',
+  'ssl://satoshi.vision.cash:50002'
 ];
+
+function set_server(server)
+{
+    _servers = [server]
+    if (_client !== null) {
+        _client.close()
+        _client = null
+    }
+}
 
 async function client ()
 {
   if (_client === null) {
-    server = _servers[Math.floor(Math.random() * _servers.length)]
-    const c = new electrum(server[0], server[1], 'ssl')
+    let server = _servers[Math.floor(Math.random() * _servers.length)]
+    console.log(server)
+    server = server.split('://')
+    const proto = server[0]
+    server = server[1].split(':')
+    const port = server[1]
+    const host = server[0]
+    const c = new electrum(host, port, proto)
     _client = c
   }
   await _client.connect()
@@ -104,6 +120,7 @@ async function findTx (id)
 }
 
 module.exports = {
+  set_server: set_server,
   client: client,
   get_rawtx: get_rawtx,
   get_utxos: get_utxos,
