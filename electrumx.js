@@ -5,11 +5,12 @@ var _client = null
 
 var _servers = [
 //  'tcp://localhost:5001',
-  'ssl://sv.usebsv.com:50002',
-  'ssl://electrum.privateservers.network:50011',
-  'ssl://sv2.satoshi.io:50002',
-  'ssl://sv.satoshi.io:50002',
+
+  'ssl://sv.usebsv.com:50002', // official electrumx server
   'ssl://satoshi.vision.cash:50002'
+  'ssl://sv.satoshi.io:50002',
+  'ssl://sv2.satoshi.io:50002',
+  'ssl://electrum.privateservers.network:50011',
 ];
 
 function set_server(server)
@@ -25,7 +26,7 @@ async function client ()
 {
   if (_client === null) {
     let server = _servers[Math.floor(Math.random() * _servers.length)]
-    console.log(server)
+    console.log('\n== electrumx ' + server + ' ==\n')
     server = server.split('://')
     const proto = server[0]
     server = server[1].split(':')
@@ -89,16 +90,12 @@ async function get_history (address)
 
 async function broadcast (transaction)
 {
-  console.log('electrumx broadcast ' + transaction)
   const electrum = await client()
   try {
     result = await electrum.blockchain_transaction_broadcast(transaction)
   } catch(e) {
-    console.log('failed to broadcast ' + e)
-    console.log(e.stack)
     throw e
   }
-  console.log('result: ' + result)
   return result[0].hash
 }
 

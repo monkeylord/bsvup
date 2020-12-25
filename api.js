@@ -82,18 +82,14 @@ async function tryBroadcastAll (TXs) {
         await broadcast(Cache.loadTX(identifier, 'unbroadcasted'))
       }
       successPossible = true
-    } catch (errors) {
+    } catch (error) {
       log(`${identifier} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
-      if (errors[0] != identifier || !errors[1]) {
-        throw errors
-      }
-      log(errors[1].split('\n')[0], logLevel.INFO)
-      log(errors[1].split('\n')[2], logLevel.INFO)
-      if (errors[1].indexOf('Missing inputs') !== -1) {
+      log(error, logLevel.INFO)
+      if (error.indexOf('Missing inputs') !== -1) {
         // missing inputs, success might not be possible if double-spend
       } else {
         successPossible = true
-        if (errors[1].indexOf('too-long-mempool-chain') !== -1) {
+        if (error.indexOf('too-long-mempool-chain') !== -1) {
           needToWait = true
         }
       }

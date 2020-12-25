@@ -35,33 +35,42 @@ async function get_utxos (address) {
     Broadcast transaction though insight API
 */
 async function broadcastInsight (tx) {
-  return mattercloud.sendRawTx(tx.toString()).then(async r => {
-    if (r.message && r.message.message) {
-      throw r
+  try {
+    return mattercloud.sendRawTx(tx.toString()).then(async r => {
+      if (r.message && r.message.message) {
+        throw r
+      }
+      if (!r.txid) {
+        // 2020-02-04: this appears to indicate mattercloud rate limiting
+        log(r, logLevel.INFO)
+        log('Waiting 60s ...', logLevel.INFO)
+        return new Promise(resolve => setTimeout(resolve, 60000))
+          .then(() => broadcastInsight(tx))
+      }
+      return r.txid
+    }).catch(async err => {
+      let code
+      if (err.message && err.message.message) {
+        err.message = err.message.message
+      }
+      if (err.code == 500 && err.message.indexOf('Transaction already in the mempool') !== -1) {
+        console.log(` Mattercloud reports already in mempool: ${tx.id}`)
+        return tx.id
+      }
+      code = err.code
+      err = err.message.split('\n').slice(0, 3).join('\n')
+      console.log(' MatterCloud API return Errors: ' + code)
+      console.log(err)
+      throw [tx.id, 'MatterCloud API return Errors: ' + err]
+    })
+  } catch (errors) {
+    if (errors[0] != tx.id || !errors[1]) {
+      throw Error(errors)
     }
-    if (!r.txid) {
-      // 2020-02-04: this appears to indicate mattercloud rate limiting
-      log(r, logLevel.INFO)
-      log('Waiting 60s ...', logLevel.INFO)
-      return new Promise(resolve => setTimeout(resolve, 60000))
-        .then(() => broadcastInsight(tx))
-    }
-    return r.txid
-  }).catch(async err => {
-    let code
-    if (err.message && err.message.message) {
-      err.message = err.message.message
-    }
-    if (err.code == 500 && err.message.indexOf('Transaction already in the mempool') !== -1) {
-      console.log(` Mattercloud reports already in mempool: ${tx.id}`)
-      return tx.id
-    }
-    code = err.code
-    err = err.message.split('\n').slice(0, 3).join('\n')
-    console.log(' MatterCloud API return Errors: ' + code)
-    console.log(err)
-    throw [tx.id, 'MatterCloud API return Errors: ' + err]
-  })
+    console.log(errors[1].split('\n')[0])
+    console.log(errors[1].split('\n')[2])
+    throw Error(errors[1])
+  }
 }
 
 async function get_rawtx (txid) {
