@@ -49,6 +49,7 @@ program
   .option('-t, --type [type]', 'Directory type: dir / html / none  【目录类型，用于表明目录被如何表示】', 'html')
   .option('-p, --password [password]', 'Password to unlock privatekey 【解锁私钥的密码】')
   .option('-b, --broadcast', 'Broadcast without asking  【生成后直接广播】', false)
+  .option('-c, --confirmations [num]', 'How many tx confirmations to wait for', 5)
   .option('-s, --subdirectory [subdirectory]', 'Upload to sub directory onchain  【上传到子目录】', '')
   .option('-n, --newtask', 'abandon unbroadcasted and start new tasks  【放弃未广播内容】')
   .option('-v, --verbose', 'show detailed infomation  【显示详细信息】')
@@ -116,8 +117,8 @@ async function init () {
     showQR(pk)
   }
 }
-async function broadcast () {
-  let remaining = await api.tryBroadcastAll()
+async function broadcast (TXs) {
+  let remaining = await api.tryBroadcastAll(TXs, program.confirmations)
   if (remaining.length > 0) {
     console.log(`${remaining.length}个TX广播失败，已保存至'./.bsv/unbroadcasted/'，120秒后重新尝试广播。`)
     console.log(`Not All Transaction Broadcasted, ${remaining.length} transaction(s) is saved to './.bsv/unbroadcasted/' and will be rebroadcasted in 120s.`)
@@ -180,7 +181,12 @@ async function upload () {
     fs.writeFileSync(`bsvup.${timenow}.txs`, JSON.stringify(unBroadcast.map(tx => tx.toString())))
     console.log(`TX(s) for the tasks is saved at bsvup.${timenow}.txs`)
     console.log('开始广播，可能需要花费一段时间，等几个区块。\r\nStart Broadcasting, it may take a while and several block confirmation...')
-    broadcast()
+    /* pass the transactions from memory in addition to caching them on the filesystem.
+       this provides for more defense against other malicious processes changing them.
+        note: broadcasting does not compare the two -- it's just a precaution for now.
+       TODO: rewrite client in a self-hosting compiled language such as C,
+             for similar reasons. */
+    broadcast(unBroadcast)
   }
 }
 
