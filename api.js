@@ -116,7 +116,7 @@ async function broadcast (tx) {
     Try broadcast all transactions given.
     If TXs is null, load transactions from cache.
 */
-async function tryBroadcastAll (TXs) {
+async function tryBroadcastAll (TXs, confirmations) {
   if (TXs) {
     for (let transaction of TXs) {
       Cache.saveTX(transaction, 'unbroadcasted')
@@ -130,6 +130,8 @@ async function tryBroadcastAll (TXs) {
       let txexists = await Backends.findTx(identifier)
       if (txexists.length) {
         if (txexists[0].blk) {
+          // to find the confirmations, we need the length of the chain.
+          // we'd also want to verify the block difficulty is comparable or increases
           log(`Confirmed ${identifier} in block ${txexists[0].blk.h}`, logLevel.INFO)
           let transaction = Cache.loadTX(identifier, 'unbroadcasted')
           Cache.saveTX(transaction)
