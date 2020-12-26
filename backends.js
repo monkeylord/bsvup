@@ -8,6 +8,7 @@
 const mattercloud = require('./mattercloud.js')
 const electrumx = require('./electrumx.js')
 const bsvrpc = require('./bsvrpc.js')
+const bsvp2p = require('./bsvp2p.js')
 const bsv = require('bsv')
 const bitbus = require('./bitbus.js')
 
