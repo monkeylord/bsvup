@@ -42,7 +42,7 @@ async function findTx (id) {
       },
       'project': {
         'tx.h': 1,
-        'blk.h': 1
+        'blk': 1
       }
     }
   }
