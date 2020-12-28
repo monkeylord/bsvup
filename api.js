@@ -160,7 +160,14 @@ async function tryBroadcastAll (TXs) {
   }
   if (!successPossible && Cache.haveUnbroadcast()) {
     log('ERROR: All transactions failed from missing inputs.  Was wallet in use elsewhere?', logLevel.ERROR)
-    Cache.abandonUnbroadcast()
+    lost = Cache.abandonUnbroadcast()
+    if (lost.length) {
+      log('ERROR: ' + lost.length)  + ' transactions were permanently lost due to a chainfork:', logLevel.ERROR)
+      for (const txfilename of lost) {
+        log('LOST DATA: ' + txfilename, logLevel.ERROR)
+      }
+      throw new Error('data lost due to chainfork')
+    }
   }
   return Cache.loadUnbroadcast()
 }
