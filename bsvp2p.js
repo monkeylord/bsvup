@@ -1,3 +1,5 @@
+// this uses the bsv-p2p module kevinejohn/bsv-p2p, which is the one on npm
+
 const bsv_p2p = require('bsv-p2p')
 
 // for now environment variable BSV_PEERS can be set for node addresses
@@ -52,7 +54,7 @@ async function broadcast (transaction)
 {
   const nodes = await peers()
   _broadcasting[transaction] = 0
-  txid = await Promise.race(Object.values(nodes).map(peer => peer.broadcastTx(transaction)))
+  txid = await Promise.race(Object.values(nodes).map(peer => peer.broadcastTx(Buffer.from(transaction, 'hex'))))
   delete _broadcasting[transaction]
   return txid
 }
