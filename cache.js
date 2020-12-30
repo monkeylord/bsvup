@@ -100,7 +100,10 @@ function loadTX (txid, subdir = 'tx') {
 function wipeTX (txid, subdir = 'tx') {
   try {
     fs.unlinkSync(`./.bsv/${subdir}/${txid}`)
-  } catch (err) { }
+    return false
+  } catch (err) {
+    return `.bsv/${subdir}/${txid}`
+  }
 }
 
 function saveUnbroadcast (unBroadcast) {
@@ -178,12 +181,19 @@ function wipeUnbroadcast () {
 }
 
 function abandonUnbroadcast () {
+  const wiped_confirmed = []
   if (haveUnbroadcast()) {
+    const subdir = `transactions-abandoned-${Date.now()}`
     for (let transaction of loadUnbroadcast()) {
-      saveTX(`transactions-abandoned-${Date.now()}`)
-      wipeTX(transaction.id)
+      saveTX(transaction, subdir)
+      wipeTX(transaction.id, 'unbroadcasted')
+      let lost = wipeTX(transaction.id, 'tx')
+      if (lost) {
+        wiped_confirmed.append(lost)
+      }
     }
   }
+  return wiped_confirmed
 }
 
 module.exports = {
