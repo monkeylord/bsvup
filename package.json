@@ -13,7 +13,7 @@
     "bsv": "^1.3.0",
     "commander": "^4.1.1",
     "inquirer": "^6.5.0",
-    "mattercloudjs": "^1.0.6",
+    "mattercloudjs": "^1.1.2",
     "mime": "^2.4.4",
     "mime-db": "^1.40.0",
     "mime-lookup": "^0.0.2",
