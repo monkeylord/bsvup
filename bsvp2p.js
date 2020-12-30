@@ -1,6 +1,4 @@
-// this uses the bsv-p2p module kevinejohn/bsv-p2p, which is the one on npm
-
-const bsv_p2p = require('bsv-p2p')
+const bsv_p2p = require('bsv-p2p-kevinejohn')
 
 // for now environment variable BSV_PEERS can be set for node addresses
 _nodeaddrs = process.env.BSV_NODES || 'seed.bitcoinsv.io,seed.cascharia.com,seed.satoshisvision.network'
