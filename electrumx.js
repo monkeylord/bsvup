@@ -7,7 +7,7 @@ var _servers = [
 //  'tcp://localhost:5001',
 
   'ssl://sv.usebsv.com:50002', // official electrumx server
-  'ssl://satoshi.vision.cash:50002'
+  'ssl://satoshi.vision.cash:50002',
   'ssl://sv.satoshi.io:50002',
   'ssl://sv2.satoshi.io:50002',
   'ssl://electrum.privateservers.network:50011',

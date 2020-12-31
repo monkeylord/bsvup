@@ -8,7 +8,8 @@
 const mattercloud = require('./mattercloud.js')
 const electrumx = require('./electrumx.js')
 const bsvrpc = require('./bsvrpc.js')
-const bsvp2p = require('./bsvp2p.js')
+const bsvp2p = require('./bsvp2p-kevinejohn.js')
+const bitcorespv = require('./bitcore-spv.js')
 const bsv = require('bsv')
 const bitbus = require('./bitbus.js')
 
@@ -36,7 +37,8 @@ async function broadcast (transaction)
 {
   console.log('backends broadcast')
   //return bsvrpc.broadcast(transaction)
-  return electrumx.broadcast(transaction)
+  //return electrumx.broadcast(transaction)
+  return bitcorespv.broadcast(transaction)
 }
 
 // Functions that were originally in bitdb.js
