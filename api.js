@@ -223,7 +223,7 @@ async function findD (key, address, value) {
     log(`Query all D records on ${address} from BitBus...`, logLevel.VERBOSE)
     dRecords = await Backends.findD(null, address)
   }
-  var keyDRecords = dRecords.filter(record => record.key === key)
+  var keyDRecords = dRecords.filter(record => record.key === encodeURI(key))
   var dRecord = (keyDRecords.length > 0) ? keyDRecords[0] : null
   if (dRecord && dRecord.value === value) return true
   else return false
