@@ -1,3 +1,11 @@
+// previously seen transactions are ignored when 'tx' is received.  notably rejected transactions.
+// the validation queue has a size limit, and transactions are ignored if this is reached
+// the mempool has a size limit (default 1000 MB), and transactions appear ignored if this is reached.  this likely empties when a new block happens.
+// the validation queue has a time limit, too.  10 seconds for a single run, 100ms frequency.  expiring this moves lower priority transactions to a different queue.
+    // this expiration should send a rejection,  I believe.  there are a lot of rejections, including too-long-mempool-chain, which might have to do with spending from the mempool
+    // some of these rejections might be wrong. 
+// default max memory usage for transaction queues is 2GB.
+
 // polyfill to use bsv-legacy as bitcore-lib for bitcore-spv
 const bsv = require('bsv')
 bsv.util.buffer = {
