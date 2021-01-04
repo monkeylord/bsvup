@@ -14,15 +14,10 @@ const MimeLookup = require('mime-lookup')
 const MIME = new MimeLookup(require('mime-db'))
 const crypto = require('crypto')
 const Cache = require('./cache.js')
-/*
-var bitindex = require('bitindex-sdk').instance({
-  api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
-})
-*/
-var mattercloud = require('mattercloudjs').instance({
-  api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
-})
-var axios = require('axios')
+const logjs = require('./log.js')
+const setLogLevel = logjs.setLevel
+const logLevel = logjs.level
+const log = logjs.log
 
 /*
     Handling transfer
@@ -36,7 +31,7 @@ async function transfer (address, key) {
   tx.feePerKb(1536)
   tx.sign(key)
   log(`转账TXID Transfer TXID: ${tx.id}`, logLevel.INFO)
-  await broadcastInsight(tx.toString(), true)
+  await Backends.broadcast(tx)
 }
 
 /*
@@ -44,57 +39,7 @@ async function transfer (address, key) {
 */
 async function getUTXOs (address) {
   log(`Requesting UTXOs for ${address}`, logLevel.INFO)
-  return mattercloud.getUtxos([address]).then(utxos => {
-    if (utxos.code) {
-      log(`Error code ${utxos.code}: ${utxos.message}`, logLevel.WARNING)
-    }
-    return utxos
-  })
-  /*
-    return new Promise((resolve, reject)=>{
-        insight.getUtxos(address,(err,unspents)=>{
-            if(err){
-                reject("Insight API return Errors: " + err)
-            } else {
-                utxos = unspents
-                resolve(unspents)
-            }
-        })
-    })
-    */
-}
-
-/*
-    Broadcast transaction though insight API
-*/
-async function broadcastInsight (tx) {
-  return mattercloud.sendRawTx(tx.toString()).then(async r => {
-    if (r.message && r.message.message) {
-      throw r
-    }
-    if (!r.txid) {
-      // 2020-02-04: this appears to indicate mattercloud rate limiting
-      log(r, logLevel.INFO)
-      log('Waiting 60s ...', logLevel.INFO)
-      return new Promise(resolve => setTimeout(resolve, 60000))
-        .then(() => broadcastInsight(tx))
-    }
-    return r.txid
-  }).catch(async err => {
-    let code
-    if (err.message && err.message.message) {
-      err.message = err.message.message
-    }
-    if (err.code == 500 && err.message.indexOf('Transaction already in the mempool') !== -1) {
-      log(` Mattercloud reports already in mempool: ${tx.id}`, logLevel.INFO)
-      return tx.id
-    }
-    code = err.code
-    err = err.message.split('\n').slice(0, 3).join('\n')
-    log(' MatterCloud API return Errors: ' + code, logLevel.INFO)
-    log(err, logLevel.INFO)
-    throw [tx.id, 'MatterCloud API return Errors: ' + err]
-  })
+  return Backends.get_utxos(address)
 }
 
 /*
@@ -102,7 +47,7 @@ async function broadcastInsight (tx) {
 */
 async function broadcast (tx) {
   try {
-    const res = await broadcastInsight(tx)
+    const res = await Backends.broadcast(tx)
     Cache.saveTX(tx)
     log(`Broadcasted ${res}`, logLevel.INFO)
     return res
@@ -141,18 +86,14 @@ async function tryBroadcastAll (TXs) {
         await broadcast(Cache.loadTX(identifier, 'unbroadcasted'))
       }
       successPossible = true
-    } catch (errors) {
+    } catch (error) {
       log(`${identifier} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
-      if (errors[0] != identifier || !errors[1]) {
-        throw errors
-      }
-      log(errors[1].split('\n')[0], logLevel.INFO)
-      log(errors[1].split('\n')[2], logLevel.INFO)
-      if (errors[1].indexOf('Missing inputs') !== -1) {
+      log(error, logLevel.INFO)
+      if (error.indexOf('Missing inputs') !== -1) {
         // missing inputs, success might not be possible if double-spend
       } else {
         successPossible = true
-        if (errors[1].indexOf('too-long-mempool-chain') !== -1) {
+        if (error.indexOf('too-long-mempool-chain') !== -1) {
           needToWait = true
         }
       }
@@ -235,9 +176,7 @@ async function getTX (txid) {
     if (tx) {
       resolve(tx)
     } else {
-      // Access mattercloud with Insight API
-      //mattercloud.getTx(txid).then(res => {
-      axios.get(`https://api.mattercloud.net/api/rawtx/${txid}`).then(res=>res.data).then(res => {
+      Backends.get_rawtx(txid).then(res => {
         tx = bsv.Transaction(res.rawtx)
         Cache.saveTX(tx)
         resolve(tx)
@@ -347,27 +286,6 @@ function readFiles (path) {
 
 function isDirectory (path) {
   return fs.statSync(path).isDirectory()
-}
-
-const logLevel = {
-  NONE: -1,
-  CRITICAL: 0,
-  ERROR: 1,
-  WARNING: 2,
-  INFO: 3,
-  VERBOSE: 4
-}
-
-var currentLogLevel = logLevel.WARNING
-
-function setLogLevel (level) {
-  currentLogLevel = level
-}
-
-function log (log, level) {
-  if (!(level > currentLogLevel)) {
-    console.log(log)
-  }
 }
 
 module.exports = {

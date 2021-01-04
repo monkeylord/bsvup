@@ -5,10 +5,8 @@
     - broadcast transactions
 */
 
-const mattercloud = require('mattercloudjs').instance({
-  api_key: '4ZiBSwCzjgkCzDbX9vVV2TGqe951CBrwZytbbWiGqDuzkDETEkLJ9DDXuNMLsr8Bpj'
-})
 const bsv = require('bsv')
+const mattercloud = require('./mattercloud.js')
 const bitbus = require('./bitbus.js')
 const axios = require('axios')
 
@@ -19,17 +17,17 @@ async function get_bitquery (query)
 
 async function get_rawtx (identifier)
 {
-  // TODO STUB: return transaction from mattercloud or whatsonchain or anything
+  return mattercloud.get_rawtx(identifier)
 }
 
 async function get_utxos (address)
 {
-  // TODO STUB: return transactions, coins spendable by address
+  return mattercloud.get_utxos(address)
 }
 
 async function broadcast (transaction)
 {
-  // TODO STUB: broadcast transaction to network, return identifier of result
+  return mattercloud.broadcast(transaction)
 }
 
 // Functions that were originally in bitdb.js
