@@ -89,7 +89,7 @@ async function tryBroadcastAll (TXs) {
     } catch (error) {
       log(`${identifier} 广播失败，原因 fail to broadcast:`, logLevel.INFO)
       log(error, logLevel.INFO)
-      if (error.indexOf('Missing inputs') !== -1) {
+      if (('' + error).indexOf('Missing inputs') !== -1) {
         // missing inputs, success might not be possible if double-spend
       } else {
         successPossible = true
