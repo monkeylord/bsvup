@@ -28,7 +28,6 @@ async function get_array (query) {
     }
     return r
   } catch (e) {
-    console.log(e)
     return []
   }
 }
