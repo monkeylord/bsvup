@@ -25,6 +25,9 @@ async function connect (addr)
     if (txs.length) {
       // async call
       console.log('connected to ' + addr + ', broadcasting: ' + JSON.stringify(txs))
+      for (i in txs) {
+        txs[i] = Buffer.from(txs[i], 'hex')
+      }
       peer.broadcastTxs(txs)
     }
   })
